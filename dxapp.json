@@ -1,0 +1,21 @@
+{
+  "name": "RNA_seq_workflow",
+  "title": "RNA-Seq Analysis Pipeline",
+  "summary": "Maps RNA-Seq data, removes duplicates, assembles transcripts and assesses expression using Tophat/cufflinks/cuffdiff toolkit.",
+  "categories": ["RNA-Seq"],
+  "dxapi": "1.0.0",
+  "inputSpec": [
+    {"name": "reads", "class": "array:gtable", "type": "LetterReads"},
+    {"name": "output name", "class": "string", "optional": true},
+    {"name": "reference", "class": "record", "type": {"$or": ["ContigSet", "BowtieLetterContigSetV2"]}}
+  ],
+  "outputSpec": [
+    {"name": "mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},
+    {"name": "junctions", "class": "gtable", "type": "Spans"},
+    {"name": "ins_del", "class": "gtable", "type": "SimpleVar" },
+    {"name": "indexed_reference", "class": "record", "type": "BowtieLetterContigSetV2"}
+  ],
+  "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
+  "resources": [],
+  "version": "1.0.0"
+}
