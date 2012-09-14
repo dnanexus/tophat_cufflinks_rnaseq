@@ -2,6 +2,8 @@
 import dxpy
 import subprocess
 import logging
+import os
+import multiprocessing
 
 
 def run_shell(command):
@@ -21,10 +23,10 @@ def make_indexed_reference( ref_ID ):
 
     indexed_ref_dxfile = dxpy.upload_local_file("reference.tar.xz", hidden=True, wait_on_close=True)
     
-    indexed_ref_record = dxpy.new_dxrecord(name=ref_name + " (indexed for Bowtie)",
+    indexed_ref_record = dxpy.new_dxrecord(name=ref_name + " (indexed for Bowtie2)",
                                            types=["BowtieLetterContigSetV2"],
                                            details={'index_archive': dxpy.dxlink(indexed_ref_dxfile.get_id()),
-                                                    'original_contigset': job['input']['reference']})
+                                                    'original_contigset': dxpy.dxlink(ref_ID)})
     indexed_ref_record.close()
     
     '''
@@ -33,13 +35,76 @@ def make_indexed_reference( ref_ID ):
         indexed_ref_record.clone(job["projectWorkspace"])
     '''
 
-    return indexed_ref_record
+    return indexed_ref_record.get_id()
 
 
-def parse_tophat_options( ):
+def parse_tophat_options( options ):
     # take job input and translate into command line options for tophat
     # also do some sanity checking?
-    pass
+
+    opt_string = []
+
+    if not 'tophap_options' in options:
+        seg_len = 100
+        multi_hit = 1 
+
+        opt_list = " ".join(["-g", str(multi_hit), "--b2-very-fast", "--segment-length", str(seg_len)])
+
+    else:
+        opt_list = options['tophat_options']
+
+    return opt_list
+
+def upload_transcripts_file( trans_file ):
+    
+    trans_schema = [("chr", "string"),
+                    ("lo", "int32"),
+                    ("hi", "int32"),
+                    ("gene_id", "string"),
+                    ("gene_short_name", "string"),
+                    ("length", "int32"),
+                    ("coverage", "float"),
+                    ("FPKM", "float"),
+                    ("FPKM_lo", "float"),
+                    ("FPKM_hi", "float"),
+                    ("status", "string")]
+    
+    column_descriptors = [dxpy.DXGTable.make_column_desc(name, type) for name, type in trans_schema]
+
+    gri_index = dxpy.DXGTable.genomic_range_index("chr", "lo", "hi")
+    transcripts = dxpy.new_dxgtable(column_descriptors, indices=[gri_index])
+
+    with open(trans_file, 'r') as fh:
+        # eat column header line
+        line = fh.readline()
+        while True:
+            line = fh.readline()
+            if line == '':
+                break
+            
+            line = line.split('\t')
+            try:
+                chrom = line[6].split(":")[0]
+                lo = int(line[6].split(":")[1].split("-")[0]) - 1
+                hi = int(line[6].split(":")[1].split("-")[1])
+            
+                transcripts.add_row([chrom,
+                                     lo,
+                                     hi, 
+                                     line[3], 
+                                     line[4], 
+                                     int(line[7]), 
+                                     float(line[8]), 
+                                     float(line[9]),
+                                     float(line[10]),
+                                     float(line[11]),
+                                     line[12]])
+            except IndexError:
+                raise dxpy.AppError("Error parsing transcript file from cufflinks.  Line: "+line)
+
+    transcripts.close()
+
+    return transcripts
 
 def check_reads( reads_tables ):
     # validate that tables contain data that can be used together (all paired or all unpaired, etc)
@@ -47,25 +112,33 @@ def check_reads( reads_tables ):
 
 def dump_fastqa( reads_ID, output_base ):
 
-    if 'sequence2' in dxpy.DXGTable("reads_ID").get_col_names():
+    if 'sequence2' in dxpy.DXGTable(reads_ID).get_col_names():
         paired = True
     else:
         paired = False
 
     if paired:
-        run_shell(" ".join(["dx-reads-to-fastq", "--output "+output_base+"_1", "--output2 "+output_base+"_2"]))
+        run_shell(" ".join(["dx-reads-to-fastq", reads_ID, "--output "+output_base+"_1", "--output2 "+output_base+"_2"]))
     else:
-        run_shell(" ".join(["dx-reads-to-fastq", "--output "+output_base+"_1"]))
+        run_shell(" ".join(["dx-reads-to-fastq", reads_ID, "--output "+output_base+"_1"]))
 
-@dxpy.entry_point
+    run_shell("head "+output_base+"_1")
+
+    if paired:
+        return output_base+"_1", output_base+"_2"
+    else:
+        return output_base+"_1", None
+
+@dxpy.entry_point('main')
 def main(**job_inputs):
     
     output = {}
 
-    options = parse_tophat_options( job_inputs )
+    options = parse_tophat_options(job_inputs)
 
     check_reads( job_inputs['reads'] )
 
+    resources_ID = os.environ.get("DX_RESOURCES_ID")
 
     # Convert reads tables to FASTQ/FASTA files
     left_reads = []
@@ -76,22 +149,72 @@ def main(**job_inputs):
         left, right = dump_fastqa( reads['$dnanexus_link'], "reads_"+str(current_reads) )
 
         left_reads.append( left )
-        if right_reads != None:
+        if right != None:
             right_reads.append( right )
 
+    
+    # hard code hg19 and genes tracks into analysis
 
+    resources_id = os.environ['DX_RESOURCES_ID']
+    resource_bundle_id = dxpy.find_one_data_object(classname="file", name="tophat_resources.tar.gz", project=resources_id, return_handler = False)['id']
+
+    #resource_bundle_id = job_inputs['resources']
+
+    dxpy.download_dxfile(dxpy.dxlink(resource_bundle_id, project_id=resources_id), "tophat_resources.tar.gz")
+
+    run_shell("tar -xzf tophat_resources.tar.gz")
+
+
+    # if we're taking in a reference from the user then 
+    '''
     # download reference (and make index if necessary)
-    if "ContigSet" in dxpy.DXRecord(job['input']['reference']).describe()['types']:
-        job['output']['indexed_reference'] = make_indexed_reference()
+    if "ContigSet" in dxpy.DXRecord(job_inputs['reference']).describe()['types']:
+        output['indexed_reference'] = dxpy.dxlink(make_indexed_reference(job_inputs['reference']['$dnanexus_link']))
 
-    elif "BowtieLetterContigSetV2" in dxpy.DXRecord(job['input']['reference']).describe()['types']:
-        dxpy.download_dxfile(dxpy.get_details(job["input"]["reference"])['index_archive'], "indexed_ref.tar.xz")
+    elif "BowtieLetterContigSetV2" in dxpy.DXRecord(job_inputs['reference']).describe()['types']:
+        dxpy.download_dxfile(dxpy.get_details(job_inputs["reference"])['index_archive'], "indexed_ref.tar.xz")
         run_shell("tar -xJf indexed_ref.tar.xz")
+        output['indexed_reference'] = job_inputs['reference']
 
-    output['indexed_reference'] = job['input']['reference']
+    run_shell("ls -l")
 
-    # Invoke tophat2 with FASTQ/A file(s) and indexed reference
-    run_shell(" ".join(['tophat',"indexed_ref"," ".join(left_reads)," ".join(right_reads)]))
+    '''
 
+    num_cpus = multiprocessing.cpu_count()
 
-    return outputs
+    tophat_options = parse_tophat_options( job_inputs )
+
+    cmd = " ".join(['tophat', "-p", str(num_cpus), tophat_options, "--transcriptome-index=./genes", "genome"," ".join(left_reads)])
+
+    if len(right_reads) != 0:
+        cmd += " ".join(right_reads)
+    print "Running Tophat with: " + cmd
+    # Invoke tophat2 with FASTQ/A file(s) and indexed reference    
+    run_shell(cmd)
+
+    run_shell("ls -l")
+
+    # upload and import the BAM as a Mappings table
+    accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
+    name = job_inputs.get('output name', "RNA-seq mappings")
+    sam_importer = dxpy.DXApp(name="sam_bam_importer")
+    import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
+                                             "reference_genome":dxpy.dxlink(ref, project_id=ref_proj),
+                                             "name":name})
+
+    cuff_cmd = " ".join(['cufflinks', 'tophat_out/accepted_hits.bam'])    
+    print "Running Cufflinks with: " + cuff_cmd
+    # now with mapped reads in hand we can run cufflinks
+    run_shell(cuff_cmd)
+
+    orig_trans_file = dxpy.upload_local_file('genes.fpkm_tracking')
+    transcripts_table = upload_transcripts_file('genes.fpkm_tracking')
+
+    #ref = dxpy.DXRecord(output['indexed_reference']).get_details()['original_contigset']['$dnanexus_link']
+    #ref_proj = dxpy.DXRecord(ref).describe()['project']
+
+    output['mappings'] = {"job":import_job.get_id(), "field": "mappings"}
+    output['transcripts'] = dxpy.dxlink(transcripts_table.get_id())
+    output['orig_trans_file'] = dxpy.dxlink(orig_trans_file.get_id()
+
+    return output
