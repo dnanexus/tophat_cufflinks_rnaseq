@@ -1,7 +1,7 @@
 {
   "name": "RNA_seq_workflow",
   "title": "RNA-Seq Analysis Pipeline",
-  "summary": "Maps RNA-Seq data, assembles transcripts and assesses expression using Tophat/Cufflinks toolkit.",
+  "summary": "Maps RNA-Seq data and assesses expression using Tophat/Cufflinks toolkit.",
   "categories": ["RNA-Seq"],
   "dxapi": "1.0.0",
   "inputSpec": [
@@ -12,9 +12,9 @@
   "outputSpec": [
     {"name": "mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},
     {"name": "transcripts", "class": "gtable"},
-    {"name": "orig_trans_file", "class": "file"}
+    {"name": "cufflinks_output", "class": "file"}
   ],
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
-  "resources": "file-B19gJz37yP3FVgKVjGG0002g"
+  "resources": "project-B17vQvq7yP3GPGx2Y4FQ000Y",
   "version": "0.0.1"
 }

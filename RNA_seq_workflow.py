@@ -48,7 +48,7 @@ def parse_tophat_options( options ):
         seg_len = 100
         multi_hit = 1 
 
-        opt_list = " ".join(["-g", str(multi_hit), "--b2-very-fast", "--segment-length", str(seg_len)])
+        opt_list = " ".join(["-g", str(multi_hit), "--b2-very-fast", "--no-coverage-search", "--segment-length", str(seg_len)])
 
     else:
         opt_list = options['tophat_options']
@@ -68,7 +68,7 @@ def upload_transcripts_file( trans_file ):
                     ("FPKM_lo", "float"),
                     ("FPKM_hi", "float"),
                     ("status", "string")]
-    
+
     column_descriptors = [dxpy.DXGTable.make_column_desc(name, type) for name, type in trans_schema]
 
     gri_index = dxpy.DXGTable.genomic_range_index("chr", "lo", "hi")
@@ -79,15 +79,22 @@ def upload_transcripts_file( trans_file ):
         line = fh.readline()
         while True:
             line = fh.readline()
+            line = line.rstrip('\n')
             if line == '':
                 break
-            
+
             line = line.split('\t')
+
             try:
                 chrom = line[6].split(":")[0]
                 lo = int(line[6].split(":")[1].split("-")[0]) - 1
                 hi = int(line[6].split(":")[1].split("-")[1])
-            
+                # no length set, set to 0
+                if line[7] == '-':
+                    line[7] = 0
+                if line[8] == '-':
+                    line[8] = -1
+
                 transcripts.add_row([chrom,
                                      lo,
                                      hi, 
@@ -102,7 +109,8 @@ def upload_transcripts_file( trans_file ):
             except IndexError:
                 raise dxpy.AppError("Error parsing transcript file from cufflinks.  Line: "+line)
 
-    transcripts.close()
+    # block so that we can exit soon after and clone this table out
+    transcripts.close(block = True)
 
     return transcripts
 
@@ -157,6 +165,7 @@ def main(**job_inputs):
 
     resources_id = os.environ['DX_RESOURCES_ID']
     resource_bundle_id = dxpy.find_one_data_object(classname="file", name="tophat_resources.tar.gz", project=resources_id, return_handler = False)['id']
+    genome_id = dxpy.find_one_data_object(classname="record", name="hg19", project=resources_id, return_handler = False)['id']
 
     #resource_bundle_id = job_inputs['resources']
 
@@ -194,27 +203,29 @@ def main(**job_inputs):
 
     run_shell("ls -l")
 
+    #ref = dxpy.DXRecord(output['indexed_reference']).get_details()['original_contigset']['$dnanexus_link']
+    #ref_proj = dxpy.DXRecord(ref).describe()['project']
+
     # upload and import the BAM as a Mappings table
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
     name = job_inputs.get('output name', "RNA-seq mappings")
     sam_importer = dxpy.DXApp(name="sam_bam_importer")
     import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
-                                             "reference_genome":dxpy.dxlink(ref, project_id=ref_proj),
+                                             "reference_genome":dxpy.dxlink(genome_id, project_id=resources_id),
                                              "name":name})
 
-    cuff_cmd = " ".join(['cufflinks', 'tophat_out/accepted_hits.bam'])    
+    cuff_cmd = " ".join(['cufflinks', '-G genes.gff', '-o cuff', 'tophat_out/accepted_hits.bam'])    
     print "Running Cufflinks with: " + cuff_cmd
     # now with mapped reads in hand we can run cufflinks
     run_shell(cuff_cmd)
 
-    orig_trans_file = dxpy.upload_local_file('genes.fpkm_tracking')
-    transcripts_table = upload_transcripts_file('genes.fpkm_tracking')
-
-    #ref = dxpy.DXRecord(output['indexed_reference']).get_details()['original_contigset']['$dnanexus_link']
-    #ref_proj = dxpy.DXRecord(ref).describe()['project']
+    # package cufflinks output
+    run_shell("tar -czf cufflinks_output.tar.gz cuff/")
+    orig_trans_file = dxpy.upload_local_file('cufflinks_output.tar.gz')
+    transcripts_table = upload_transcripts_file('cuff/genes.fpkm_tracking')
 
     output['mappings'] = {"job":import_job.get_id(), "field": "mappings"}
     output['transcripts'] = dxpy.dxlink(transcripts_table.get_id())
-    output['orig_trans_file'] = dxpy.dxlink(orig_trans_file.get_id()
+    output['cufflinks_output'] = dxpy.dxlink(orig_trans_file.get_id())
 
     return output
