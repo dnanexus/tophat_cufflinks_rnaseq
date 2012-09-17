@@ -5,6 +5,7 @@ import logging
 import os
 import multiprocessing
 
+from dxpy.dxlog import DXLogHandler
 
 def run_shell(command):
     logging.debug("Running "+command)
@@ -56,27 +57,34 @@ def parse_tophat_options( options ):
     return opt_list
 
 def upload_transcripts_file( trans_file ):
-    
-    trans_schema = [("chr", "string"),
-                    ("lo", "int32"),
-                    ("hi", "int32"),
-                    ("gene_id", "string"),
-                    ("gene_short_name", "string"),
-                    ("length", "int32"),
-                    ("coverage", "float"),
-                    ("FPKM", "float"),
-                    ("FPKM_lo", "float"),
-                    ("FPKM_hi", "float"),
-                    ("status", "string")]
-
-    column_descriptors = [dxpy.DXGTable.make_column_desc(name, type) for name, type in trans_schema]
-
-    gri_index = dxpy.DXGTable.genomic_range_index("chr", "lo", "hi")
-    transcripts = dxpy.new_dxgtable(column_descriptors, indices=[gri_index])
 
     with open(trans_file, 'r') as fh:
         # eat column header line
-        line = fh.readline()
+        line = fh.readline().rstrip('\n')
+
+        line = line.split('\t')
+
+        trans_schema = [("chr", "string"),
+                        ("lo", "int32"),
+                        ("hi", "int32"),
+                        ("tracking_id", "string"),
+                        ("class_code", "string"),
+                        ("nearest_ref_id", "string"),
+                        ("gene_id", "string"),
+                        ("gene_short_name", "string"),
+                        ("tss_id", "string"),
+                        ("length", "int32"),
+                        ("coverage", "float"),
+                        ("q0_FPKM", "float"),
+                        ("q0_FPKM_lo", "float"),
+                        ("q0_FPKM_hi", "float"),
+                        ("q0_status", "string")]
+
+        column_descriptors = [dxpy.DXGTable.make_column_desc(name, type) for name, type in trans_schema]
+
+        gri_index = dxpy.DXGTable.genomic_range_index("chr", "lo", "hi")
+        transcripts = dxpy.new_dxgtable(column_descriptors, indices=[gri_index])
+
         while True:
             line = fh.readline()
             line = line.rstrip('\n')
@@ -95,21 +103,24 @@ def upload_transcripts_file( trans_file ):
                 if line[8] == '-':
                     line[8] = -1
 
-                transcripts.add_row([chrom,
-                                     lo,
-                                     hi, 
-                                     line[3], 
-                                     line[4], 
-                                     int(line[7]), 
-                                     float(line[8]), 
-                                     float(line[9]),
-                                     float(line[10]),
-                                     float(line[11]),
-                                     line[12]])
+                trans_row = [chrom, lo, hi, 
+                             line[0], 
+                             line[1], 
+                             line[2], 
+                             line[3], 
+                             line[4], 
+                             line[5], 
+                             int(line[7]), 
+                             float(line[8]), 
+                             float(line[9]), 
+                             float(line[10]), 
+                             float(line[11]), 
+                             line[12]]
+
+                transcripts.add_row(trans_row)
             except IndexError:
                 raise dxpy.AppError("Error parsing transcript file from cufflinks.  Line: "+line)
 
-    # block so that we can exit soon after and clone this table out
     transcripts.close(block = True)
 
     return transcripts
@@ -140,6 +151,10 @@ def dump_fastqa( reads_ID, output_base ):
 @dxpy.entry_point('main')
 def main(**job_inputs):
     
+    logging.getLogger().setLevel(logging.DEBUG)
+
+    logging.debug("Beginning processing of RNA data")
+
     output = {}
 
     options = parse_tophat_options(job_inputs)
@@ -154,6 +169,7 @@ def main(**job_inputs):
 
     current_reads = 0
     for reads in job_inputs['reads']:
+        logging.debug("Converting reads table "+str(reads['$dnanexus_link']))
         left, right = dump_fastqa( reads['$dnanexus_link'], "reads_"+str(current_reads) )
 
         left_reads.append( left )
@@ -169,8 +185,10 @@ def main(**job_inputs):
 
     #resource_bundle_id = job_inputs['resources']
 
+    logging.debug("Downloading hg19 and transcript information")
     dxpy.download_dxfile(dxpy.dxlink(resource_bundle_id, project_id=resources_id), "tophat_resources.tar.gz")
 
+    logging.debug("Unpacking resource bundle")
     run_shell("tar -xzf tophat_resources.tar.gz")
 
 
@@ -197,11 +215,9 @@ def main(**job_inputs):
 
     if len(right_reads) != 0:
         cmd += " ".join(right_reads)
-    print "Running Tophat with: " + cmd
+
     # Invoke tophat2 with FASTQ/A file(s) and indexed reference    
     run_shell(cmd)
-
-    run_shell("ls -l")
 
     #ref = dxpy.DXRecord(output['indexed_reference']).get_details()['original_contigset']['$dnanexus_link']
     #ref_proj = dxpy.DXRecord(ref).describe()['project']
@@ -210,15 +226,17 @@ def main(**job_inputs):
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
     name = job_inputs.get('output name', "RNA-seq mappings")
     sam_importer = dxpy.DXApp(name="sam_bam_importer")
+    logging.debug("Importing BAM output of Tophat")
     import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
                                              "reference_genome":dxpy.dxlink(genome_id, project_id=resources_id),
                                              "name":name})
 
     cuff_cmd = " ".join(['cufflinks', '-G genes.gff', '-o cuff', 'tophat_out/accepted_hits.bam'])    
-    print "Running Cufflinks with: " + cuff_cmd
+
     # now with mapped reads in hand we can run cufflinks
     run_shell(cuff_cmd)
 
+    logging.debug("Packing, uploading, and parsing cufflinks output")
     # package cufflinks output
     run_shell("tar -czf cufflinks_output.tar.gz cuff/")
     orig_trans_file = dxpy.upload_local_file('cufflinks_output.tar.gz')
@@ -227,5 +245,7 @@ def main(**job_inputs):
     output['mappings'] = {"job":import_job.get_id(), "field": "mappings"}
     output['transcripts'] = dxpy.dxlink(transcripts_table.get_id())
     output['cufflinks_output'] = dxpy.dxlink(orig_trans_file.get_id())
+
+    logging.debug("DONE!  Returning with: " + " ".join([output]))
 
     return output
