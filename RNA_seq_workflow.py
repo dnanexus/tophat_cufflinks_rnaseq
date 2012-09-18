@@ -176,6 +176,7 @@ def main(**job_inputs):
         if right != None:
             right_reads.append( right )
 
+        current_reads += 1
     
     # hard code hg19 and genes tracks into analysis
 
@@ -211,10 +212,10 @@ def main(**job_inputs):
 
     tophat_options = parse_tophat_options( job_inputs )
 
-    cmd = " ".join(['tophat', "-p", str(num_cpus), tophat_options, "--transcriptome-index=./genes", "genome"," ".join(left_reads)])
+    cmd = " ".join(['tophat', "-p", str(num_cpus), tophat_options, "--transcriptome-index=./genes", "--no-novel-juncs", "-T", "genome", " ", ",".join(left_reads)])
 
     if len(right_reads) != 0:
-        cmd += " ".join(right_reads)
+        cmd += " " + ",".join(right_reads)
 
     # Invoke tophat2 with FASTQ/A file(s) and indexed reference    
     run_shell(cmd)
@@ -231,7 +232,7 @@ def main(**job_inputs):
                                              "reference_genome":dxpy.dxlink(genome_id, project_id=resources_id),
                                              "name":name})
 
-    cuff_cmd = " ".join(['cufflinks', '-G genes.gff', '-o cuff', 'tophat_out/accepted_hits.bam'])    
+    cuff_cmd = " ".join(['cufflinks', '-p', str(num_cpus), '-G genes.gff', '-o cuff', 'tophat_out/accepted_hits.bam'])    
 
     # now with mapped reads in hand we can run cufflinks
     run_shell(cuff_cmd)
@@ -246,6 +247,6 @@ def main(**job_inputs):
     output['transcripts'] = dxpy.dxlink(transcripts_table.get_id())
     output['cufflinks_output'] = dxpy.dxlink(orig_trans_file.get_id())
 
-    logging.debug("DONE!  Returning with: " + " ".join([output]))
+    logging.debug("DONE!")
 
     return output
