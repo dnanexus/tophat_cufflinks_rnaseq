@@ -75,15 +75,16 @@ def upload_transcripts_file( trans_file ):
                         ("tss_id", "string"),
                         ("length", "int32"),
                         ("coverage", "float"),
-                        ("q0_FPKM", "float"),
-                        ("q0_FPKM_lo", "float"),
-                        ("q0_FPKM_hi", "float"),
-                        ("q0_status", "string")]
+                        ("FPKM", "float"),
+                        ("FPKM_lo", "float"),
+                        ("FPKM_hi", "float"),
+                        ("status", "string")]
 
         column_descriptors = [dxpy.DXGTable.make_column_desc(name, type) for name, type in trans_schema]
 
         gri_index = dxpy.DXGTable.genomic_range_index("chr", "lo", "hi")
         transcripts = dxpy.new_dxgtable(column_descriptors, indices=[gri_index])
+        transcripts.rename("FPKM_per_gene")
 
         while True:
             line = fh.readline()
