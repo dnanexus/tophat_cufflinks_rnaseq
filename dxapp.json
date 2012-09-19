@@ -6,8 +6,7 @@
   "dxapi": "1.0.0",
   "inputSpec": [
     {"name": "reads", "class": "array:gtable", "type": "LetterReads"},
-    {"name": "output name", "class": "string", "optional": true},
-    {"name": "tophat_options", "class": "string", "optional": true}
+    {"name": "output name", "class": "string", "optional": true}
   ],
   "outputSpec": [
     {"name": "mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},
@@ -15,6 +14,6 @@
     {"name": "cufflinks_output", "class": "file"}
   ],
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
-  "resources": "project-B17vQvq7yP3GPGx2Y4FQ000Y",
+  "resources": "project-B1GFVFfQxKJKz8Yy3180008Y",
   "version": "0.0.1"
 }

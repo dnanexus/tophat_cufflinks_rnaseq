@@ -7,6 +7,13 @@ import multiprocessing
 
 from dxpy.dxlog import DXLogHandler
 
+multi_hit = 1
+seg_len = 100
+
+tophat_options = " ".join(["-g ", str(multi_hit), "--b2-very-fast", "--no-coverage-search", "--segment-length", str(seg_len)])
+
+cufflinks_options = " ".join(['-G genes.gff', '-o cuff'])
+
 def run_shell(command):
     logging.debug("Running "+command)
     subprocess.check_call(command, shell=True)
@@ -38,23 +45,6 @@ def make_indexed_reference( ref_ID ):
 
     return indexed_ref_record.get_id()
 
-
-def parse_tophat_options( options ):
-    # take job input and translate into command line options for tophat
-    # also do some sanity checking?
-
-    opt_string = []
-
-    if not 'tophap_options' in options:
-        seg_len = 100
-        multi_hit = 1 
-
-        opt_list = " ".join(["-g", str(multi_hit), "--b2-very-fast", "--no-coverage-search", "--segment-length", str(seg_len)])
-
-    else:
-        opt_list = options['tophat_options']
-
-    return opt_list
 
 def upload_transcripts_file( trans_file ):
 
@@ -128,7 +118,23 @@ def upload_transcripts_file( trans_file ):
 
 def check_reads( reads_tables ):
     # validate that tables contain data that can be used together (all paired or all unpaired, etc)
-    pass
+
+    if len(reads_tables) == 0:
+        raise AppError("Please enter at least one Reads table as input")
+
+    single = 0
+    paired = 0
+
+    for table in reads_tables:
+        if 'sequence2' in dxpy.DXGTable(table).get_col_names():
+            paired = paired + 1
+        else:
+            single = single + 1
+
+    if single > 0 and paired > 0:
+        raise AppError("Found both single and paired-end reads.  Please only input one type.")
+
+    return
 
 def dump_fastqa( reads_ID, output_base ):
 
@@ -157,8 +163,6 @@ def main(**job_inputs):
     logging.debug("Beginning processing of RNA data")
 
     output = {}
-
-    options = parse_tophat_options(job_inputs)
 
     check_reads( job_inputs['reads'] )
 
@@ -193,36 +197,15 @@ def main(**job_inputs):
     logging.debug("Unpacking resource bundle")
     run_shell("tar -xzf tophat_resources.tar.gz")
 
-
-    # if we're taking in a reference from the user then 
-    '''
-    # download reference (and make index if necessary)
-    if "ContigSet" in dxpy.DXRecord(job_inputs['reference']).describe()['types']:
-        output['indexed_reference'] = dxpy.dxlink(make_indexed_reference(job_inputs['reference']['$dnanexus_link']))
-
-    elif "BowtieLetterContigSetV2" in dxpy.DXRecord(job_inputs['reference']).describe()['types']:
-        dxpy.download_dxfile(dxpy.get_details(job_inputs["reference"])['index_archive'], "indexed_ref.tar.xz")
-        run_shell("tar -xJf indexed_ref.tar.xz")
-        output['indexed_reference'] = job_inputs['reference']
-
-    run_shell("ls -l")
-
-    '''
-
     num_cpus = multiprocessing.cpu_count()
 
-    tophat_options = parse_tophat_options( job_inputs )
-
-    cmd = " ".join(['tophat', "-p", str(num_cpus), tophat_options, "--transcriptome-index=./genes", "--no-novel-juncs", "-T", "genome", " ", ",".join(left_reads)])
+    cmd = " ".join(['tophat', "-p", str(num_cpus), tophat_options, "--transcriptome-index=./genes", "--no-novel-juncs", "-T", "hg19", " ", ",".join(left_reads)])
 
     if len(right_reads) != 0:
         cmd += " " + ",".join(right_reads)
 
     # Invoke tophat2 with FASTQ/A file(s) and indexed reference    
     run_shell(cmd)
-
-    #ref = dxpy.DXRecord(output['indexed_reference']).get_details()['original_contigset']['$dnanexus_link']
-    #ref_proj = dxpy.DXRecord(ref).describe()['project']
 
     # upload and import the BAM as a Mappings table
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
@@ -233,7 +216,7 @@ def main(**job_inputs):
                                              "reference_genome":dxpy.dxlink(genome_id, project_id=resources_id),
                                              "name":name})
 
-    cuff_cmd = " ".join(['cufflinks', '-p', str(num_cpus), '-G genes.gff', '-o cuff', 'tophat_out/accepted_hits.bam'])    
+    cuff_cmd = " ".join(['cufflinks', '-p', str(num_cpus), cufflinks_options,  'tophat_out/accepted_hits.bam'])    
 
     # now with mapped reads in hand we can run cufflinks
     run_shell(cuff_cmd)
