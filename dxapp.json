@@ -14,6 +14,6 @@
     {"name": "cufflinks_output", "class": "file"}
   ],
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
-  "resources": "project-B1GFVFfQxKJKz8Yy3180008Y",
+  "resources": "project-B17vQvq7yP3GPGx2Y4FQ000Y",
   "version": "0.0.1"
 }
