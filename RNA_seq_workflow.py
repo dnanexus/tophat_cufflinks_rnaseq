@@ -163,6 +163,7 @@ def main(**job_inputs):
     logging.debug("Beginning processing of RNA data")
 
     output = {}
+    global tophat_options, cufflinks_options
 
     check_reads( job_inputs['reads'] )
 
