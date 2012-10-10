@@ -15,5 +15,6 @@
   ],
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
   "resources": "project-B17vQvq7yP3GPGx2Y4FQ000Y",
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "details": {"contactUrl": "http://wiki.dnanexus.com/Apps/rna-seq-workflow"}
 }
