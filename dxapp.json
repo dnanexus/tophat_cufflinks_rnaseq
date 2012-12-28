@@ -5,17 +5,22 @@
   "categories": ["RNA-Seq"],
   "dxapi": "1.0.0",
   "inputSpec": [
-    {"name": "reads", "class": "array:gtable", "type": "LetterReads"},
-    {"name": "output name", "class": "string", "optional": true}
+    {"name": "reads", "label": "Reads", "class": "array:gtable", "type": "LetterReads"},
+    {"name": "tophat_options", "label": "Tophat Options", "class": "string", "default": "-g 1 --b2-very-fast --no-coverage-search --segment-length 100 --no-novel-juncs"},
+    {"name": "cufflinks_options", "label": "Cufflinks Options", "class": "string", "optional":true},
+    {"name": "reference", "label": "Reference", "class": "record", "type": "ContigSet"},
+    {"name": "indexed_reference", "label": "Indexed Reference", "class": "record", "type": "BowtieLetterContigSetV2", "optional":true},
+    {"name": "gene_model", "label": "Gene Model", "class": "gtable", "type": "Genes"},
+    {"name": "output name", "label": "Output Name", "class": "string", "optional": true}
   ],
   "outputSpec": [
-    {"name": "mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},
-    {"name": "transcripts", "class": "gtable"},
-    {"name": "cufflinks_output", "class": "file"}
+    {"name": "mappings", "label": "Mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},
+    {"name": "indexed_reference", "label": "Indexed Reference", "class": "record", "type": "BowtieLetterContigSetV2"},
+    {"name": "transcripts", "label": "Expression Levels", "class": "gtable"},
+    {"name": "cufflinks_output", "label": "Cufflinks Outputs", "class": "file"}
   ],
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
-  "resources": "project-B17vQvq7yP3GPGx2Y4FQ000Y",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "details": {
     "contactUrl": "http://wiki.dnanexus.com/Apps/rna-seq-workflow",
     "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",  

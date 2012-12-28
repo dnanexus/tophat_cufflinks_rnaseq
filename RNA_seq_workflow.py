@@ -7,15 +7,9 @@ import multiprocessing
 
 from dxpy.dxlog import DXLogHandler
 
-multi_hit = 1
-seg_len = 100
-
-tophat_options = " ".join(["-g ", str(multi_hit), "--b2-very-fast", "--no-coverage-search", "--segment-length", str(seg_len)])
-
-cufflinks_options = " ".join(['-G genes.gff', '-o cuff'])
 
 def run_shell(command):
-    logging.debug("Running "+command)
+    print "Running "+command
     subprocess.check_call(command, shell=True)
 
 def make_indexed_reference( ref_ID ):
@@ -158,16 +152,11 @@ def dump_fastqa( reads_ID, output_base ):
 @dxpy.entry_point('main')
 def main(**job_inputs):
     
-    logging.getLogger().setLevel(logging.DEBUG)
-
-    logging.debug("Beginning processing of RNA data")
+    print "Beginning processing of RNA data"
 
     output = {}
-    global tophat_options, cufflinks_options
 
     check_reads( job_inputs['reads'] )
-
-    resources_ID = os.environ.get("DX_RESOURCES_ID")
 
     # Convert reads tables to FASTQ/FASTA files
     left_reads = []
@@ -175,7 +164,7 @@ def main(**job_inputs):
 
     current_reads = 0
     for reads in job_inputs['reads']:
-        logging.debug("Converting reads table "+str(reads['$dnanexus_link']))
+        print "Converting reads table "+str(reads['$dnanexus_link'])
         left, right = dump_fastqa( reads['$dnanexus_link'], "reads_"+str(current_reads) )
 
         left_reads.append( left )
@@ -184,45 +173,58 @@ def main(**job_inputs):
 
         current_reads += 1
     
-    # hard code hg19 and genes tracks into analysis
+    # Convert Genes Object to GFF file 
 
-    resources_id = os.environ['DX_RESOURCES_ID']
-    resource_bundle_id = dxpy.find_one_data_object(classname="file", name="tophat_resources.tar.gz", project=resources_id, return_handler = False)['id']
-    genome_id = dxpy.find_one_data_object(classname="record", name="hg19", project=resources_id, return_handler = False)['id']
+    run_shell("dx-genes-to-gtf --output genes.gtf "+job_inputs['gene_model']['$dnanexus_link'])
 
-    #resource_bundle_id = job_inputs['resources']
+    # Create or download indexed genome
+    genome = dxpy.DXRecord(job_inputs['reference'])
 
-    logging.debug("Downloading hg19 and transcript information")
-    dxpy.download_dxfile(dxpy.dxlink(resource_bundle_id, project_id=resources_id), "tophat_resources.tar.gz")
+    if not 'indexed_reference' in job_inputs:
+        output['indexed_reference'] = dxpy.dxlink(make_indexed_reference(genome.get_id()))
+    else:
+        output['indexed_reference'] = job_inputs['indexed_reference']
+        indexed_genome = dxpy.DXRecord(job_inputs['indexed_reference'])
+        dxpy.download_dxfile(indexed_genome.get_details()['index_archive'], "reference.tar.xz")
+        run_shell("tar -xJf reference.tar.xz")
 
-    logging.debug("Unpacking resource bundle")
-    run_shell("tar -xzf tophat_resources.tar.gz")
-
+    # call tophat
     num_cpus = multiprocessing.cpu_count()
 
-    cmd = " ".join(['tophat', "-p", str(num_cpus), tophat_options, "--transcriptome-index=./genes", "--no-novel-juncs", "-T", "hg19", " ", ",".join(left_reads)])
+    cmd = " ".join(['tophat', "-p", str(num_cpus), job_inputs['tophat_options'], "-G genes.gtf", "--transcriptome-index=./genes", "-T", "indexed_ref", " ", ",".join(left_reads)])
 
     if len(right_reads) != 0:
         cmd += " " + ",".join(right_reads)
 
     # Invoke tophat2 with FASTQ/A file(s) and indexed reference    
-    run_shell(cmd)
+    try:
+        run_shell(cmd)
+    except:
+        raise dxpy.AppError("Error while running Tophat.  This could be caused by an incompatible gene model and reference or incorrect optional parameters.  Please check that these are all correct")
 
     # upload and import the BAM as a Mappings table
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
     name = job_inputs.get('output name', "RNA-seq mappings")
     sam_importer = dxpy.DXApp(name="sam_bam_importer")
-    logging.debug("Importing BAM output of Tophat")
+    print "Importing BAM output of Tophat"
     import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
-                                             "reference_genome":dxpy.dxlink(genome_id, project_id=resources_id),
+                                             "reference_genome":dxpy.dxlink(genome.get_id()),
                                              "name":name})
 
-    cuff_cmd = " ".join(['cufflinks', '-p', str(num_cpus), cufflinks_options,  'tophat_out/accepted_hits.bam'])    
+    cuff_cmd = " ".join(['cufflinks', '-p', str(num_cpus), '-G genes.gtf', '-o cuff'])
+
+    if 'cufflinks_options' in job_inputs:
+        cuff_cmd += " "+job_inputs['cufflinks_options']
+
+    cuff_cmd += " tophat_out/accepted_hits.bam"
 
     # now with mapped reads in hand we can run cufflinks
-    run_shell(cuff_cmd)
+    try:
+        run_shell(cuff_cmd)
+    except:
+        raise dxpy.AppError("Error while running Cufflinks.  Please check that your parameters are valid")
 
-    logging.debug("Packing, uploading, and parsing cufflinks output")
+    print "Packing, uploading, and parsing cufflinks output"
     # package cufflinks output
     run_shell("tar -czf cufflinks_output.tar.gz cuff/")
     orig_trans_file = dxpy.upload_local_file('cufflinks_output.tar.gz')
@@ -232,6 +234,6 @@ def main(**job_inputs):
     output['transcripts'] = dxpy.dxlink(transcripts_table.get_id())
     output['cufflinks_output'] = dxpy.dxlink(orig_trans_file.get_id())
 
-    logging.debug("DONE!")
+    print "DONE!"
 
     return output
