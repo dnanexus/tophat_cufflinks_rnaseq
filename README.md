@@ -28,7 +28,6 @@ Links to the source and information about the underlying programs can be found h
 
 *output name*: (OPTIONAL) Name of Mappings table output.  If not supplied the Mappings output will be "RNA-seq mappings".
 
-
 **Outputs:**
 
 *Mappings*: A gtable of type [Mappings](http://wiki.dnanexus.com/Types/Mappings) that contains the reads after alignment to the transcriptome.

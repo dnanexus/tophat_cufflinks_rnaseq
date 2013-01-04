@@ -7,11 +7,11 @@
   "inputSpec": [
     {"name": "reads", "label": "Reads", "class": "array:gtable", "type": "LetterReads"},
     {"name": "tophat_options", "label": "Tophat Options", "class": "string", "default": "-g 1 --b2-very-fast --no-coverage-search --segment-length 100 --no-novel-juncs"},
-    {"name": "cufflinks_options", "label": "Cufflinks Options", "class": "string", "optional":true},
+    {"name": "cufflinks_options", "label": "Cufflinks Options", "class": "string", "optional": true},
     {"name": "reference", "label": "Reference", "class": "record", "type": "ContigSet"},
-    {"name": "indexed_reference", "label": "Indexed Reference", "class": "record", "type": "BowtieLetterContigSetV2", "optional":true},
+    {"name": "indexed_reference", "label": "Indexed Reference", "class": "record", "type": "BowtieLetterContigSetV2", "optional": true},
     {"name": "gene_model", "label": "Gene Model", "class": "gtable", "type": "Genes"},
-    {"name": "output name", "label": "Output Name", "class": "string", "optional": true}
+    {"name": "output_name", "label": "Output Name", "class": "string", "optional": true}
   ],
   "outputSpec": [
     {"name": "mappings", "label": "Mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},

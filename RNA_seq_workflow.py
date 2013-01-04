@@ -1,4 +1,3 @@
-
 import dxpy
 import subprocess
 import logging
@@ -6,7 +5,6 @@ import os
 import multiprocessing
 
 from dxpy.dxlog import DXLogHandler
-
 
 def run_shell(command):
     print "Running "+command
@@ -39,9 +37,7 @@ def make_indexed_reference( ref_ID ):
 
     return indexed_ref_record.get_id()
 
-
 def upload_transcripts_file( trans_file ):
-
     with open(trans_file, 'r') as fh:
         # eat column header line
         line = fh.readline().rstrip('\n')
@@ -131,7 +127,6 @@ def check_reads( reads_tables ):
     return
 
 def dump_fastqa( reads_ID, output_base ):
-
     if 'sequence2' in dxpy.DXGTable(reads_ID).get_col_names():
         paired = True
     else:
@@ -151,7 +146,6 @@ def dump_fastqa( reads_ID, output_base ):
 
 @dxpy.entry_point('main')
 def main(**job_inputs):
-    
     print "Beginning processing of RNA data"
 
     output = {}
@@ -204,7 +198,7 @@ def main(**job_inputs):
 
     # upload and import the BAM as a Mappings table
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
-    name = job_inputs.get('output name', "RNA-seq mappings")
+    name = job_inputs.get('output_name', "RNA-seq mappings")
     sam_importer = dxpy.DXApp(name="sam_bam_importer")
     print "Importing BAM output of Tophat"
     import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
