@@ -11,8 +11,8 @@ def run_shell(command):
     subprocess.check_call(command, shell=True)
 
 def make_indexed_reference( ref_ID ):
-    
-    run_shell("contigset2fasta %s reference.fasta" % ref_ID)
+
+    run_shell("dx-contigset-to-fasta %s reference.fasta" % ref_ID)
     ref_details = dxpy.DXRecord(ref_ID).get_details()
     ref_name = dxpy.DXRecord(ref_ID).describe()['name']
 
