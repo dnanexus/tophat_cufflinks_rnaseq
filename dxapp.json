@@ -22,7 +22,6 @@
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
   "version": "1.0.0",
   "details": {
-    "contactUrl": "http://wiki.dnanexus.com/Apps/rna-seq-workflow",
     "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",  
     "upstreamUrl": "http://bioinformatics.igm.jhmi.edu/salzberg/Salzberg/Software.html",
     "upstreamLicenses": ["Boost"],
