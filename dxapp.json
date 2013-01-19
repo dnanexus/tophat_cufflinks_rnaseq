@@ -22,7 +22,7 @@
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
   "version": "1.0.0",
   "details": {
-    "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",  
+    "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",
     "upstreamUrl": "http://bioinformatics.igm.jhmi.edu/salzberg/Salzberg/Software.html",
     "upstreamLicenses": ["Boost"],
     "citations": ["doi: 10.1093/bioinformatics/btr355", "doi:10.1186/gb-2009-10-3-r25", "doi: 10.1093/bioinformatics/btp120"]

@@ -1,18 +1,14 @@
-RNA-Seq Analysis Pipeline
-=========================
-
 This app bundles Bowtie2, Tophat2 and Cufflinks to map RNA-Seq reads and quantitate expression.  These result in a Mappings table containing all mapped reads and a table containing per-gene expression level represented in FPKM values (Fragments Per Kilobase of transcript per Million mapped reads).  Full output of the cufflinks program is also output as a tar file which also contains expression on the per isoform level.
 
 This pipeline does not support novel gene or isoform discovery.  Reads will only be mapped to transcripts found in the input Genes object.  This corresponds to running Tophat with the "-G" and "--transcriptome-index" options.  While these options will always be passed to Tophat, further options modifying both Tophat and Cufflinks steps are accepted by the app.
 
 Links to the source and information about the underlying programs can be found here:
-[Bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
-[Tophat](http://tophat.cbcb.umd.edu/)
-[Cufflinks](http://cufflinks.cbcb.umd.edu/)
 
----------
+* [Bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
+* [Tophat](http://tophat.cbcb.umd.edu/)
+* [Cufflinks](http://cufflinks.cbcb.umd.edu/)
 
-**Inputs:**
+# Inputs
 
 *reads*: An array of gtables of type "Reads" which contain the RNA-seq reads.  These can be generated  from FASTQ or FASTA files with the Reads Importer app.  The pipeline support both paired and unpaired reads but all inputs must be of the same type:  all paired or all unpaired.
 
@@ -28,7 +24,7 @@ Links to the source and information about the underlying programs can be found h
 
 *output name*: (OPTIONAL) Name of Mappings table output.  If not supplied the Mappings output will be "RNA-seq mappings".
 
-**Outputs:**
+# Outputs
 
 *Mappings*: A gtable of type [Mappings](http://wiki.dnanexus.com/Types/Mappings) that contains the reads after alignment to the transcriptome.
 
