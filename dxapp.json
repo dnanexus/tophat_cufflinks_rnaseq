@@ -1,5 +1,5 @@
 {
-  "name": "RNA_seq_workflow",
+  "name": "tophat_cufflinks_rnaseq",
   "title": "RNA-Seq Analysis Pipeline",
   "summary": "Maps RNA-Seq data and assesses expression using Tophat/Cufflinks toolkit.",
   "categories": ["RNA-Seq"],
