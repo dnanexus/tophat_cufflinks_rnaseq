@@ -1,7 +1,7 @@
 {
   "name": "tophat_cufflinks_rnaseq",
   "title": "RNA-Seq Analysis Pipeline",
-  "summary": "Maps RNA-Seq data and assesses expression using Tophat/Cufflinks toolkit.",
+  "summary": "Maps RNA-Seq data and assesses expression using Tophat/Cufflinks toolkit",
   "categories": ["RNA-Seq"],
   "dxapi": "1.0.0",
   "inputSpec": [
@@ -20,7 +20,7 @@
     {"name": "cufflinks_output", "label": "Cufflinks Outputs", "class": "file"}
   ],
   "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
-  "version": "1.0.0",
+  "version": "1.0.1",
   "details": {
     "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",
     "upstreamUrl": "http://bioinformatics.igm.jhmi.edu/salzberg/Salzberg/Software.html",
