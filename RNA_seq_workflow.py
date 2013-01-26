@@ -199,7 +199,7 @@ def main(**job_inputs):
     # upload and import the BAM as a Mappings table
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
     name = job_inputs.get('output_name', "RNA-seq mappings")
-    sam_importer = dxpy.DXApp(name="sam_bam_importer")
+    sam_importer = dxpy.DXApp(name="sam_importer")
     print "Importing BAM output of Tophat"
     import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
                                              "reference_genome":dxpy.dxlink(genome.get_id()),
