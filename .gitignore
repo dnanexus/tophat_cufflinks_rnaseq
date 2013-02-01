@@ -5,6 +5,7 @@ bowtie2/bowtie2-align
 bowtie2/bowtie2-build
 bowtie2/bowtie2-inspect
 cufflinks2/Makefile
+cufflinks2/autom4te.cache/
 cufflinks2/config.*
 cufflinks2/src/Makefile
 cufflinks2/src/compress_gtf
@@ -18,6 +19,7 @@ samtools/bcftools/bcftools
 samtools/misc/*
 samtools/samtools
 tophat2/Makefile
+tophat2/autom4te.cache/
 tophat2/config.*
 tophat2/src/Makefile
 tophat2/src/bam2fastx
