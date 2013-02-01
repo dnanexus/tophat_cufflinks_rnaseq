@@ -38,13 +38,13 @@ def make_indexed_reference( ref_ID ):
     run_shell("XZ_OPT=-0 tar -cJf reference.tar.xz indexed_ref*")
 
     indexed_ref_dxfile = dxpy.upload_local_file("reference.tar.xz", hidden=True, wait_on_close=True)
-    
+
     indexed_ref_record = dxpy.new_dxrecord(name=ref_name + " (indexed for Bowtie2)",
                                            types=["BowtieLetterContigSetV2"],
                                            details={'index_archive': dxpy.dxlink(indexed_ref_dxfile.get_id()),
                                                     'original_contigset': dxpy.dxlink(ref_ID)})
     indexed_ref_record.close()
-    
+
     '''
     # TODO: dxpy project workspace convenience functions
     if "projectWorkspace" in job:
@@ -100,18 +100,18 @@ def upload_transcripts_file( trans_file ):
                 if line[8] == '-':
                     line[8] = -1
 
-                trans_row = [chrom, lo, hi, 
-                             line[0], 
-                             line[1], 
-                             line[2], 
-                             line[3], 
-                             line[4], 
-                             line[5], 
-                             int(line[7]), 
-                             float(line[8]), 
-                             float(line[9]), 
-                             float(line[10]), 
-                             float(line[11]), 
+                trans_row = [chrom, lo, hi,
+                             line[0],
+                             line[1],
+                             line[2],
+                             line[3],
+                             line[4],
+                             line[5],
+                             int(line[7]),
+                             float(line[8]),
+                             float(line[9]),
+                             float(line[10]),
+                             float(line[11]),
                              line[12]]
 
                 transcripts.add_row(trans_row)
@@ -182,8 +182,8 @@ def main(**job_inputs):
             right_reads.append( right )
 
         current_reads += 1
-    
-    # Convert Genes Object to GFF file 
+
+    # Convert Genes Object to GFF file
 
     run_shell("dx-genes-to-gtf --output genes.gtf "+job_inputs['gene_model']['$dnanexus_link'])
 
@@ -206,7 +206,7 @@ def main(**job_inputs):
     if len(right_reads) != 0:
         cmd += " " + ",".join(right_reads)
 
-    # Invoke tophat2 with FASTQ/A file(s) and indexed reference    
+    # Invoke tophat2 with FASTQ/A file(s) and indexed reference
     try:
         run_shell(cmd)
     except:
@@ -217,7 +217,7 @@ def main(**job_inputs):
     name = job_inputs.get('output_name', "RNA-seq mappings")
     sam_importer = dxpy.DXApp(name="sam_importer")
     print "Importing BAM output of Tophat"
-    import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()), 
+    import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()),
                                              "reference_genome":dxpy.dxlink(genome.get_id()),
                                              "name":name})
 
