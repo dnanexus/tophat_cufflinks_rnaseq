@@ -19,7 +19,12 @@
     {"name": "transcripts", "label": "Expression Levels", "class": "gtable"},
     {"name": "cufflinks_output", "label": "Cufflinks Outputs", "class": "file"}
   ],
-  "runSpec": {"file": "RNA_seq_workflow.py", "interpreter": "python2.7", "execDepends": [{"name": "xz-utils"}]},
+  "runSpec": {
+    "file": "RNA_seq_workflow.py",
+    "interpreter": "python2.7",
+    "execDepends": [{"name": "xz-utils"}],
+    "buildDepends": [{"name": "libncurses5-dev"}, {"name": "libboost1.48-all-dev"}]
+  },
   "version": "1.0.2",
   "details": {
     "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",
