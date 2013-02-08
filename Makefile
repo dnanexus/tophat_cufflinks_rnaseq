@@ -38,10 +38,10 @@ libeigen:
 	cp -a eigen/* libeigen/include
 
 libbam: samtools
-	mkdir -p libbam/bin
+	mkdir -p libbam/lib
 	mkdir -p libbam/include/bam
 	cp -a samtools/*.h libbam/include/bam
-	cp -a samtools/libbam.a libbam/bin
+	cp -a samtools/libbam.a libbam/lib
 
 samtools:
 	make -C samtools
