@@ -48,6 +48,13 @@ samtools:
 	cp -a samtools/samtools resources/usr/local/bin
 
 clean:
+	$(MAKE) -C samtools clean
+	$(MAKE) -C bowtie clean
+	$(MAKE) -C bowtie2 clean
+	([ -e "cufflinks2/Makefile" ] && $(MAKE) -C cufflinks2 clean) || true
+	rm -rf cufflinks2/Makefile cufflinks2/config.h cufflinks2/config.log cufflinks2/config.status cufflinks2/src/.deps cufflinks2/src/Makefile cufflinks2/stamp-h1
+	([ -e "tophat2/Makefile" ] && $(MAKE) -C tophat2 clean) || true
+	rm -rf tophat2/Makefile tophat2/config.h tophat2/config.log tophat2/config.status tophat2/src/.deps tophat2/src/Makefile tophat2/stamp-h1
 	rm -f resources/usr/local/bin/*
 	rm -rf libbam
 	rm -rf libeigen
