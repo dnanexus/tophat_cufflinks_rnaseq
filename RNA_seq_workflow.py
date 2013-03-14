@@ -153,8 +153,6 @@ def dump_fastqa( reads_ID, output_base ):
     else:
         run_shell(" ".join(["dx-reads-to-fastq", reads_ID, "--output "+output_base+"_1"]))
 
-    run_shell("head "+output_base+"_1")
-
     if paired:
         return output_base+"_1", output_base+"_2"
     else:
