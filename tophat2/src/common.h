@@ -84,7 +84,10 @@ extern int island_extension;
 extern int num_threads;
 extern int segment_length; // the read segment length used by the pipeline
 extern int segment_mismatches;
-extern int max_read_mismatches;
+extern int read_mismatches;
+extern int read_gap_length;
+extern int read_edit_dist;
+extern int read_realign_edit_dist;
 
 extern int max_splice_mismatches;
 
@@ -93,6 +96,7 @@ extern ReadFormat reads_format;
 
 extern bool verbose;
 extern unsigned int max_multihits;
+extern bool suppress_hits;
 extern unsigned int max_seg_multihits;
 extern bool no_closure_search;
 extern bool no_coverage_search;
@@ -557,7 +561,15 @@ class GBamWriter {
 
    void write(GBamRecord* brec) {
       if (brec!=NULL) {
-        samwrite(this->bam_file,brec->get_b());
+	if (findex)
+	  {
+	    bam1_t* b = brec->get_b();
+	    char* name = bam1_qname(b);
+	    long read_id = atol(name);
+	    write(b, read_id);
+	  }
+	else
+	  samwrite(this->bam_file, brec->get_b());
         wcount++;
       }
 

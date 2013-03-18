@@ -17,7 +17,8 @@ bool mapped_only=false;
 bool add_matenum=false;
 bool pairs=false;
 bool color=false;
-bool ignoreQC; // ignore qc fail flag 0x400
+bool ignoreQC=false; // ignore qc fail flag 0x400
+bool ignoreOQ=false; // ignore OQ tag
 
 string outfname;
 
@@ -26,9 +27,10 @@ string outfname;
    \nNote: By default, reads flagged as not passing quality controls are\n\
    discarded; the -Q option can be used to ignore the QC flag.\n\
    \nUse the -N option if the /1 and /2 suffixes should be appended to\n\
-   read names according to the SAM flags\n"
+   read names according to the SAM flags\n\
+   \nUse the -O option to ignore the OQ tag, if present, when writing quality values\n"
 
-const char *short_options = "o:ac:qstQMAPN";
+const char *short_options = "o:ac:qstOQMAPN";
 
 enum {
    OPT_FASTA = 127,
@@ -104,6 +106,9 @@ int parse_options(int argc, char** argv)
        case 'Q':
     	 ignoreQC = true;
     	 break;
+       case 'O':
+    	 ignoreOQ = true;
+    	 break;
        case 'o':
          outfname=optarg;
          break;
@@ -126,7 +131,7 @@ void getRead(const bam1_t *b, samfile_t* fp, Read& rd) {
   rd.clear();
   char *name  = bam1_qname(b);
   rd.name=name;
-  unsigned char *qual  = (unsigned char*)bam1_qual(b);
+  unsigned char *qual  = NULL;
   unsigned char *s    = (unsigned char*)bam1_seq(b);
   int i;
 
@@ -136,13 +141,13 @@ void getRead(const bam1_t *b, samfile_t* fp, Read& rd) {
   if (mapped_only && !ismapped) return;
 
   bool isreversed=((b->core.flag & BAM_FREVERSE) != 0);
-  bool is_paired = ((b->core.flag & BAM_FPAIRED) != 0);
-  if (add_matenum) {
+  // bool is_paired = ((b->core.flag & BAM_FPAIRED) != 0);
+  //if (add_matenum) {
      if (b->core.flag & BAM_FREAD1)
          rd.mate=1;
      else if (b->core.flag & BAM_FREAD2)
          rd.mate=2;
-     }
+  //   }
   int seqlen = b->core.l_qseq;
   if (seqlen>0) {
 	rd.seq.resize(seqlen);
@@ -186,6 +191,7 @@ void getRead(const bam1_t *b, samfile_t* fp, Read& rd) {
 
 	if (!is_fastq) return;
 	if (color) {
+      qual = (unsigned char*)bam1_qual(b);
 	  rd.qual.resize(seqlen-1);
 	  for(i=1;i<seqlen;i++) {
 	    if (qual[i]==0xFF)
@@ -194,11 +200,28 @@ void getRead(const bam1_t *b, samfile_t* fp, Read& rd) {
 	  }
 	}
 	else {
-	  rd.qual.resize(seqlen);
-	  for(i=0;i<seqlen;i++) {
-	    if (qual[i]==0xFF)
-	      rd.qual[i]='I';
-	    else rd.qual[i]=qual[i]+33;
+	  bool fromOQ=false;
+	  if (!ignoreOQ) {
+	   uint8_t* ptr = bam_aux_get(b, "OQ");
+	   if (ptr) {
+	     fromOQ=true;
+	     qual = (unsigned char*)bam_aux2Z(ptr);
+	   }
+	  }
+	  if (fromOQ) {
+	    rd.qual = (char*)qual;
+	    //for(i=0;i<seqlen;i++) {
+	    //  rd.qual[i]=qual[i];
+	    //}
+	  }
+	  else {
+		qual = (unsigned char*)bam1_qual(b);
+	    rd.qual.resize(seqlen);
+	    for(i=0;i<seqlen;i++) {
+	      if (qual[i]==0xFF)
+	        rd.qual[i]='I';
+	      else rd.qual[i]=qual[i]+33;
+	    }
 	  }
 	}
 
@@ -223,25 +246,22 @@ void writeRead(Read& rd, int& wpair, FILE* fout) {
   //if (rd.seq.empty()) {
   //	    return;
   //      }
+  wpair |= (rd.mate>0 ? rd.mate : 4);
   if (is_fastq) {
-    if (rd.mate>0) {
+    if (rd.mate && add_matenum) {
       fprintf(fout, "@%s/%d\n%s\n",rd.name.c_str(), rd.mate, rd.seq.c_str());
-      wpair|=rd.mate;
     }
-     else {
-       fprintf(fout, "@%s\n%s\n",rd.name.c_str(), rd.seq.c_str());
-	   wpair|=4;
-     }
+    else {
+      fprintf(fout, "@%s\n%s\n",rd.name.c_str(), rd.seq.c_str());
+    }
     fprintf(fout, "+\n%s\n",rd.qual.c_str());
   }
   else {
-    if (rd.mate>0) {
+    if (rd.mate && add_matenum) {
       fprintf(fout, ">%s/%d\n%s\n",rd.name.c_str(), rd.mate, rd.seq.c_str());
-      wpair|=rd.mate;
     }
 	 else {
-	   fprintf(fout, ">%s\n%s\n",rd.name.c_str(), rd.seq.c_str());
-	   wpair|=4;
+	  fprintf(fout, ">%s\n%s\n",rd.name.c_str(), rd.seq.c_str());
 	 }
   }
 }
@@ -249,13 +269,9 @@ void writeRead(Read& rd, int& wpair, FILE* fout) {
 void writePaired(Read& rd, int& wpair, FILE* fout, FILE* fout2) {
   if (rd.mate==1) {
 	 writeRead(rd, wpair, fout);
-	  //if (write_mapped && last1>rd.name)
-	  //err_order(last1, rd.name);
   }
   else if (rd.mate==2) {
 	writeRead(rd, wpair, fout2);
-	//if (write_mapped && last2>rd.name)
-	  //      err_order(last2, rd.name);
   }
   else {
 	fprintf(stderr, "Error: unpaired read encountered (%s)\n", rd.name.c_str());

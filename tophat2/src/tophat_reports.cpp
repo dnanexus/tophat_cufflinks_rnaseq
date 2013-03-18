@@ -46,9 +46,8 @@
 #include "tokenize.h"
 #include "reads.h"
 #include "coverage.h"
-
-
 #include "inserts.h"
+#include "bam_merge.h"
 
 using namespace std;
 using namespace seqan;
@@ -91,6 +90,25 @@ struct cmp_read_alignment
   }
 };
 
+struct cmp_read_equal
+{
+  bool operator() (const BowtieHit& l, const BowtieHit& r) const
+  {
+    if (l.insert_id() != r.insert_id() ||
+	l.ref_id() != r.ref_id() || 
+	l.ref_id2() != r.ref_id2() ||
+	l.left() != r.left() ||
+	l.right() != r.right() ||
+	l.antisense_align() != r.antisense_align() ||
+	l.mismatches() != r.mismatches() ||
+	l.edit_dist() != r.edit_dist() ||
+	l.cigar().size() != r.cigar().size())
+      return false;
+
+    return true;
+  }
+};
+
 void read_best_alignments(const HitsForRead& hits_for_read,
 			  HitsForRead& best_hits,
 			  const JunctionSet& gtf_junctions,
@@ -100,16 +118,17 @@ void read_best_alignments(const HitsForRead& hits_for_read,
 			  const FusionSet& fusions = empty_fusions,
 			  const Coverage& coverage = empty_coverage,
 			  bool final_report = false,
-			  boost::random::mt19937* rng = NULL)
+			  boost::mt19937* rng = NULL)
 {
   const vector<BowtieHit>& hits = hits_for_read.hits;
-
   if (hits.size() >= max_multihits * 5)
     return;
 
   for (size_t i = 0; i < hits.size(); ++i)
     {
-      if (hits[i].edit_dist() > max_read_mismatches)
+      if (hits[i].mismatches() > read_mismatches ||
+	  hits[i].gap_length() > read_gap_length ||
+	  hits[i].edit_dist() > read_edit_dist)
 	continue;
 
       BowtieHit hit = hits[i];
@@ -136,6 +155,11 @@ void read_best_alignments(const HitsForRead& hits_for_read,
 	}
     }
 
+  // due to indel alignments, there may be alignments with the same location
+  std::sort(best_hits.hits.begin(), best_hits.hits.end());
+  vector<BowtieHit>::iterator new_end = std::unique(best_hits.hits.begin(), best_hits.hits.end(), cmp_read_equal());
+  best_hits.hits.erase(new_end, best_hits.hits.end());
+
   if ((report_secondary_alignments || !final_report) && best_hits.hits.size() > 0)
     {
       sort(best_hits.hits.begin(), best_hits.hits.end(), cmp_read_alignment());
@@ -143,6 +167,9 @@ void read_best_alignments(const HitsForRead& hits_for_read,
 
   if (final_report)
     {
+      if (suppress_hits && best_hits.hits.size() > max_multihits)
+	best_hits.hits.clear();
+      
       if (best_hits.hits.size() > max_multihits)
 	{
 	  // there may be several alignments with the same alignment scores,
@@ -179,22 +206,20 @@ void read_best_alignments(const HitsForRead& hits_for_read,
     }
 }
 
-bool set_insert_alignment_grade(const BowtieHit& lh, const BowtieHit& rh, const JunctionSet& junctions, InsertAlignmentGrade& grade)
+bool is_fusion_insert_alignment(const BowtieHit& lh, const BowtieHit& rh)
 {
-  bool fusion = false;
   bool left_fusion = lh.fusion_opcode() != FUSION_NOTHING;
   bool right_fusion = rh.fusion_opcode() != FUSION_NOTHING;
-  if (left_fusion && right_fusion)
-    return false;
+  if (left_fusion || right_fusion)
+    return true;
   
-  fusion = left_fusion || right_fusion;
-  if (!fusion && lh.ref_id() != rh.ref_id())
-    fusion = true;
+  if (lh.ref_id() != rh.ref_id())
+    return true;
   
-  if (!fusion && lh.ref_id() == rh.ref_id())
+  if (lh.ref_id() == rh.ref_id())
     {
       if (lh.antisense_align() == rh.antisense_align())
-	fusion = true;
+	return true;
       else
 	{
 	  int inner_dist = 0;
@@ -206,10 +231,22 @@ bool set_insert_alignment_grade(const BowtieHit& lh, const BowtieHit& rh, const 
 	    inner_dist = rh.left() - lh.left();
 	  
 	  if (inner_dist < 0 || inner_dist > (int)fusion_min_dist)
-	    fusion = true;
+	    return true;
 	}
     }
 
+  return false;
+}
+
+bool set_insert_alignment_grade(const BowtieHit& lh, const BowtieHit& rh, const JunctionSet& junctions, InsertAlignmentGrade& grade)
+{
+  bool left_fusion = lh.fusion_opcode() != FUSION_NOTHING;
+  bool right_fusion = rh.fusion_opcode() != FUSION_NOTHING;
+  if (left_fusion && right_fusion)
+    return false;
+  
+  bool fusion = is_fusion_insert_alignment(lh, rh);
+  
   // a read contains its partner, in which case the paired mapping will be ignored.
   if (!fusion)
     {
@@ -246,6 +283,35 @@ struct cmp_pair_alignment
   const JunctionSet* _junctions;
 };
 
+struct cmp_pair_equal
+{
+  bool operator() (const pair<BowtieHit, BowtieHit>& l, const pair<BowtieHit, BowtieHit>& r) const
+  {
+    if (!cmp_read_equal()(l.first, r.first) || !cmp_read_equal()(l.second, r.second))
+	return false;
+	
+    return true;
+  }
+};
+
+struct cmp_pair_less
+{
+  bool operator() (const pair<BowtieHit, BowtieHit>& l, const pair<BowtieHit, BowtieHit>& r) const
+  {
+    if (l.first < r.first)
+      return true;
+    else if (r.first < l.first)
+      return false;
+
+    if (l.second < r.second)
+      return true;
+    else if (r.second < l.second)
+      return false;
+	
+    return false;
+  }
+};
+
 void pair_best_alignments(const HitsForRead& left_hits,
 			  const HitsForRead& right_hits,
 			  InsertAlignmentGrade& best_grade,
@@ -257,7 +323,7 @@ void pair_best_alignments(const HitsForRead& left_hits,
 			  const FusionSet& fusions = empty_fusions,
 			  const Coverage& coverage = empty_coverage,
 			  bool final_report = false,
-			  boost::random::mt19937* rng = NULL)
+			  boost::mt19937* rng = NULL)
 {
   const vector<BowtieHit>& left = left_hits.hits;
   const vector<BowtieHit>& right = right_hits.hits;
@@ -267,7 +333,10 @@ void pair_best_alignments(const HitsForRead& left_hits,
 
   for (size_t i = 0; i < left.size(); ++i)
     {
-      if (left[i].edit_dist() > max_read_mismatches) continue;
+      if (left[i].mismatches() > read_mismatches ||
+	  left[i].gap_length() > read_gap_length ||
+	  left[i].edit_dist() > read_edit_dist)
+	continue;
 
       BowtieHit lh = left[i];
       AlignStatus align_status(lh, gtf_junctions,
@@ -276,7 +345,10 @@ void pair_best_alignments(const HitsForRead& left_hits,
 
       for (size_t j = 0; j < right.size(); ++j)
 	{
-	  if (right[j].edit_dist() > max_read_mismatches) continue;
+	  if (right[j].mismatches() > read_mismatches ||
+	      right[j].gap_length() > read_gap_length ||
+	      right[j].edit_dist() > read_edit_dist)
+	    continue;
 	  
 	  BowtieHit rh = right[j];
 	  AlignStatus align_status(rh, gtf_junctions,
@@ -288,7 +360,7 @@ void pair_best_alignments(const HitsForRead& left_hits,
 
 	  // daehwan - for debugging purposes
 #if 0
-	  if (lh.insert_id() == 325708 && !g.is_fusion() && false)
+	  if (lh.insert_id() == 10790262)
 	    {
 	      fprintf(stderr, "lh %d:%d %s score: %d (from %d) NM: %d\n",
 		      lh.ref_id(), lh.left(), print_cigar(lh.cigar()).c_str(),
@@ -323,7 +395,51 @@ void pair_best_alignments(const HitsForRead& left_hits,
 	    }
 	}
     }
- 
+
+  std::sort(best_hits.begin(), best_hits.end(), cmp_pair_less());
+
+  // daehwan - for debugging purposes
+#if 0
+  if (best_hits.size() > 0 && best_hits[0].first.insert_id() == 10790262)
+    {
+      for (size_t i = 0; i < best_hits.size(); ++i)
+	{
+	  const BowtieHit& lh = best_hits[i].first;
+	  const BowtieHit& rh = best_hits[i].second;
+
+	  fprintf(stderr, "%d %d:%d %s %d:%d %s\n",
+		  i,
+		  lh.ref_id(), lh.left(), print_cigar(lh.cigar()).c_str(),
+		  rh.ref_id(), rh.left(), print_cigar(rh.cigar()).c_str());
+	}
+
+      fprintf(stderr, "\n\n\n");
+    }
+#endif
+
+  vector<pair<BowtieHit, BowtieHit> >::iterator new_end = std::unique(best_hits.begin(), best_hits.end(), cmp_pair_equal());
+  best_hits.erase(new_end, best_hits.end());
+
+  // daehwan - for debugging purposes
+#if 0
+  if (best_hits.size() > 0 && best_hits[0].first.insert_id() == 10790262)
+    {
+      for (size_t i = 0; i < best_hits.size(); ++i)
+	{
+	  const BowtieHit& lh = best_hits[i].first;
+	  const BowtieHit& rh = best_hits[i].second;
+	  
+	  fprintf(stderr, "%d %d:%d %s %d:%d %s\n",
+		  i,
+		  lh.ref_id(), lh.left(), print_cigar(lh.cigar()).c_str(),
+		  rh.ref_id(), rh.left(), print_cigar(rh.cigar()).c_str());
+	}
+
+      fprintf(stderr, "\n\n\n");
+    }
+#endif
+
+
   if ((report_secondary_alignments || !final_report) && best_hits.size() > 0)
     {
       cmp_pair_alignment cmp(final_report ? junctions : gtf_junctions);
@@ -333,6 +449,9 @@ void pair_best_alignments(const HitsForRead& left_hits,
 
   if (final_report)
     {
+      if (suppress_hits && best_hits.size() > max_multihits)
+	best_hits.clear();
+	
       if (best_hits.size() > max_multihits)
 	{
 	  vector<size_t> tie_indexes;
@@ -656,16 +775,17 @@ bool rewrite_sam_record(GBamWriter& bam_writer,
   }
   int tlen=0; //TLEN
   int mate_pos=atoi(sam_toks[7].c_str());
+  string mate_contig = "*", mate_contig2 = "*";
   if (partner) {
-    if (partner->ref_id()==bh.ref_id()) {
-      sam_toks[6] = "="; //same chromosome
+    if (partner->ref_id() == bh.ref_id()) {
+      mate_contig = "="; //same chromosome
       //TLEN:
       tlen = bh.left() < partner->left() ? partner->right() - bh.left() :
 	partner->left() - bh.right();
     }
     
     else { //partner on different chromosome/contig
-      sam_toks[6] = rt.get_name(partner->ref_id());
+      mate_contig = rt.get_name(partner->ref_id());
     }
     mate_pos = partner->left() + 1;
     if (grade.happy())
@@ -673,15 +793,37 @@ bool rewrite_sam_record(GBamWriter& bam_writer,
     if (partner->antisense_align())
       flag |=  0x0020;
 
-    if (partner->fusion_opcode() != FUSION_NOTHING)
+    if (fusion_alignment)
       {
-	char partner_pos[1024];
-	sprintf(partner_pos, "XP:Z:%s-%s %d", rt.get_name(partner->ref_id()), rt.get_name(partner->ref_id2()), partner->left() + 1);
+	if (partner->ref_id() == bh.ref_id2())
+	  mate_contig2 = "=";
+	else
+	  mate_contig2 = rt.get_name(partner->ref_id());
+      }
+
+    if (fusion_search)
+      {
+	string cigar_str = print_cigar(partner->cigar());
+	char partner_pos[4096];
+	if (partner->fusion_opcode() != FUSION_NOTHING)
+	  {
+	    sprintf(partner_pos, "XP:Z:%s-%s %d %s",
+		    rt.get_name(partner->ref_id()),
+		    rt.get_name(partner->ref_id2()),
+		    partner->left() + 1,
+		    cigar_str.c_str());
+	  }
+	else
+	  {
+	    sprintf(partner_pos, "XP:Z:%s %d %s",
+		    rt.get_name(partner->ref_id()),
+		    partner->left() + 1,
+		    cigar_str.c_str());
+	  }
 	sam_toks.push_back(partner_pos);
       }
   }
   else {
-    sam_toks[6] = "*";
     mate_pos = 0;
     flag |= 0x0008;
   }
@@ -697,7 +839,7 @@ bool rewrite_sam_record(GBamWriter& bam_writer,
     if (rg_aux != "")
       auxdata.push_back(rg_aux);
     bamrec=bam_writer.new_record(qname.c_str(), flag, ref_name.c_str(), left1 + 1, mapQ,
-				 cigar1, sam_toks[6].c_str(), mate_pos,
+				 cigar1, mate_contig.c_str(), mate_pos,
 				 tlen, left_seq.c_str(), left_qual.c_str(), &auxdata);
     bam_writer.write(bamrec);
     delete bamrec;
@@ -708,7 +850,7 @@ bool rewrite_sam_record(GBamWriter& bam_writer,
     if (rg_aux != "")
       auxdata.push_back(rg_aux);
     bamrec=bam_writer.new_record(qname.c_str(), flag, ref_name2.c_str(), left2 + 1, mapQ,
-				 cigar2, sam_toks[6].c_str(), mate_pos,
+				 cigar2, mate_contig2.c_str(), mate_pos,
 				 tlen, right_seq.c_str(), right_qual.c_str(), &auxdata);
     bam_writer.write(bamrec);
     delete bamrec;
@@ -718,7 +860,7 @@ bool rewrite_sam_record(GBamWriter& bam_writer,
     if (rg_aux != "")
       auxdata.push_back(rg_aux);
     bamrec=bam_writer.new_record(qname.c_str(), flag, sam_toks[2].c_str(), gpos, mapQ,
-				 sam_toks[5].c_str(), sam_toks[6].c_str(), mate_pos,
+				 sam_toks[5].c_str(), mate_contig.c_str(), mate_pos,
 				 tlen, sam_toks[9].c_str(), sam_toks[10].c_str(), &auxdata);
     bam_writer.write(bamrec);
     delete bamrec;
@@ -755,7 +897,7 @@ void print_sam_for_single(const RefSequenceTable& rt,
 			  FragmentType frag_type,
 			  const string& alt_name,
 			  GBamWriter& bam_writer,
-			  boost::random::mt19937& rng)
+			  boost::mt19937& rng)
 {
     //assert(!read.alt_name.empty());
     if (hits.hits.empty())
@@ -798,7 +940,7 @@ void print_sam_for_pair(const RefSequenceTable& rt,
                         GBamWriter& bam_writer,
                         const string& left_alt_name,
                         const string& right_alt_name,
-			boost::random::mt19937& rng,
+			boost::mt19937& rng,
 			uint64_t begin_id = 0,
                         uint64_t end_id = std::numeric_limits<uint64_t>::max())
 {
@@ -967,7 +1109,9 @@ void exclude_hits_on_filtered_junctions(const JunctionSet& junctions, HitsForRea
   for (size_t i = 0; i < hits.hits.size(); ++i)
     {
       BowtieHit& bh = hits.hits[i];
-      if (bh.edit_dist() > max_read_mismatches)
+      if (bh.mismatches() > read_mismatches ||
+	  bh.gap_length() > read_gap_length ||
+	  bh.edit_dist() > read_edit_dist)
 	continue;
       
       bool filter_hit = false;
@@ -1135,6 +1279,7 @@ void realign_reads(HitsForRead& hits,
 					 new_cigars,
 					 bh.antisense_align(),
 					 junc.antisense,
+					 0, /* mismatches - needs to be recalculated */
 					 0, /* edit_dist - needs to be recalculated */
 					 0, /* splice_mms - needs to be recalculated */
 					 false);
@@ -1161,7 +1306,8 @@ void realign_reads(HitsForRead& hits,
 				else if (strncmp(aux_field.c_str(), "XM", 2) == 0)
 				  {
 				    int XM_value =  atoi(aux_field.c_str() + 5);
-				    new_bh.edit_dist(XM_value);
+				    new_bh.mismatches(XM_value);
+				    new_bh.edit_dist(XM_value + gap_length(new_cigars));
 				  }
 			      }
 			    
@@ -1375,9 +1521,6 @@ void realign_reads(HitsForRead& hits,
 		  
 		    while (lb != insertions.end() && lb != ub)
 		      {
-			// daehwan - for debugging purposse
-			break;
-			
 			Insertion ins = lb->first;
 			
 			// daehwan - for debugging purposes
@@ -1507,6 +1650,173 @@ void realign_reads(HitsForRead& hits,
   hits.hits.erase(new_end, hits.hits.end());  
 }
 
+class MultipleBAMReader
+{
+public:
+  MultipleBAMReader(ReadTable& it,
+		    RefSequenceTable& rt,
+		    const vector<string>& fnames,
+		    long begin_id,
+		    long end_id) :
+    _it(it),
+    _rt(rt),
+    _begin_id(begin_id),
+    _end_id(end_id),
+    _bam_hit_factory(it, rt),
+    _bam_merge(NULL)
+  {
+    // calculate file offsets
+    vector<int64_t> offsets;
+    for (size_t i = 0; i < fnames.size(); ++i)
+      {
+	const string& fname = fnames[i];
+
+	vector<string> temp_fnames;
+	if (fname.substr(fname.length() - 4) == ".bam")
+	  {
+	    temp_fnames.push_back(fname);
+	  }
+	else
+	  {
+	    size_t j = 0;
+	    while (true)
+	      {
+		char suffix[128];
+		sprintf(suffix, "%lu.bam", j);
+		string temp_fname = fname + suffix;
+
+		ifstream index_file(temp_fname.c_str());
+		if (!index_file.is_open())
+		  break;
+
+		temp_fnames.push_back(temp_fname);
+		++j;
+	      }
+	  }
+
+	for (size_t j = 0; j < temp_fnames.size(); ++j)
+	  {
+	    ifstream reads_index_file((temp_fnames[j] + ".index").c_str());
+	    if (!reads_index_file.is_open())
+	      continue;
+	    
+	    _fnames.push_back(temp_fnames[j]);
+	    
+	    int64_t last_offset = 0;
+	    uint64_t last_read_id = 0;
+	    string line;
+	    while (getline(reads_index_file, line))
+	      {
+		istringstream istream(line);
+		uint64_t read_id;
+		int64_t offset;
+		
+		istream >> read_id >> offset;
+		if (read_id > _begin_id && last_read_id <= _begin_id)
+		  {
+		    offsets.push_back(last_offset);
+
+		    // daehwan - for debugging purposes
+#if 0
+		    fprintf(stderr, "bet %lu and %lu - %s %lu %ld\n",
+			    _begin_id, _end_id, temp_fnames[j].c_str(), last_offset, last_read_id);
+#endif
+
+		    break;
+		  }
+		
+		last_offset = offset;
+		last_read_id = read_id;
+	      }
+
+	    if (last_read_id >= _end_id)
+	      break;
+	  }
+      }
+
+    _bam_merge = new BamMerge(_fnames, offsets);
+    _bam_hit_factory.set_sam_header(_bam_merge->get_sam_header());
+  }
+
+  ~MultipleBAMReader()
+  {
+    if (_bam_merge)
+      delete _bam_merge;
+  }
+
+  bool next_read_hits(HitsForRead& hits)
+  {
+    hits.insert_id = 0;
+    
+    if (!_bam_merge)
+      return false;
+
+    vector<CBamLine> bam_lines;
+    while (true)
+      {
+	if (!_bam_merge->next_bam_lines(bam_lines))
+	  return false;
+
+	if (bam_lines.size() <= 0)
+	  return false;
+
+	uint64_t read_id = bam_lines[0].read_id;
+	if (read_id >= _begin_id && read_id < _end_id)
+	  {
+	    hits.hits.clear();
+	    for (size_t i = 0; i < bam_lines.size(); ++i)
+	      {
+		CBamLine& bam_line = bam_lines[i];
+		BowtieHit bh;
+		
+		char seq[MAX_READ_LEN + 1] = {0};
+		char qual[MAX_READ_LEN + 1] = {0};
+		
+		bool success = _bam_hit_factory.get_hit_from_buf((const char*)bam_line.b, bh, true, NULL, NULL, seq, qual);
+		if (success)
+		  {
+		    bh.seq(seq);
+		    bh.qual(qual);
+		    
+		    char* sam_line = bam_format1(_bam_merge->get_sam_header(), bam_line.b);
+		    bh.hitfile_rec(sam_line);
+		    free(sam_line);
+		    
+		    hits.insert_id = bh.insert_id();
+		    hits.hits.push_back(bh);
+		  }
+
+		bam_line.b_free();
+	      }
+	    bam_lines.clear();
+
+	    if (hits.hits.size() > 0)
+	      return true;
+	  }
+
+	for (size_t i = 0; i < bam_lines.size(); ++i)
+	  bam_lines[i].b_free();
+
+	bam_lines.clear();
+
+	if (read_id >= _end_id)
+	  break;
+      }
+
+    return false;
+  }
+
+private:
+  ReadTable& _it;
+  RefSequenceTable& _rt;
+  vector<string> _fnames;
+  uint64_t _begin_id;
+  uint64_t _end_id;
+
+  BAMHitFactory _bam_hit_factory;
+  BamMerge* _bam_merge;
+};
+
 
 // events include splice junction, indels, and fusion points.
 struct ConsensusEventsWorker
@@ -1514,16 +1824,8 @@ struct ConsensusEventsWorker
   void operator()()
   {
     ReadTable it;
-    vector<BAMHitFactory*> hit_factories;
-    hit_factories.push_back(new BAMHitFactory(it, *rt));
-    HitStream l_hs(left_map_fname, hit_factories.back(), false, true, true, true);
-    if (left_map_offset > 0)
-      l_hs.seek(left_map_offset);
-
-    hit_factories.push_back(new BAMHitFactory(it, *rt));
-    HitStream r_hs(right_map_fname, hit_factories.back(), false, true, true, true);
-    if (right_map_offset > 0)
-      r_hs.seek(right_map_offset);
+    MultipleBAMReader l_hs(it, *rt, left_map_fnames, begin_id, end_id);
+    MultipleBAMReader r_hs(it, *rt, right_map_fnames, begin_id, end_id);
 
     HitsForRead curr_left_hit_group;
     HitsForRead curr_right_hit_group;
@@ -1548,7 +1850,7 @@ struct ConsensusEventsWorker
             
 	    // Process hits for left singleton, select best alignments
 	    read_best_alignments(curr_left_hit_group, best_hits, *gtf_junctions);
-	    update_coverage(best_hits, *coverage);
+	    // update_coverage(best_hits, *coverage);
 	    update_junctions(best_hits, *junctions);
 	    update_insertions_and_deletions(best_hits, *insertions, *deletions);
 	    update_fusions(best_hits, *rt, *fusions);
@@ -1569,7 +1871,8 @@ struct ConsensusEventsWorker
 	      {
 		// Process hit for right singleton, select best alignments
 		read_best_alignments(curr_right_hit_group, best_hits, *gtf_junctions);
-		update_coverage(best_hits, *coverage);
+		// update_coverage(best_hits, *coverage);
+
 		update_junctions(best_hits, *junctions);
 		update_insertions_and_deletions(best_hits, *insertions, *deletions);
 		update_fusions(best_hits, *rt, *fusions);
@@ -1579,7 +1882,7 @@ struct ConsensusEventsWorker
 	    r_hs.next_read_hits(curr_right_hit_group);
 	    curr_right_obs_order = it.observation_order(curr_right_hit_group.insert_id);
 	  }
-        
+
 	// Since we have both left hits and right hits for this insert,
 	// Find the best pairing and print both
 	while (curr_left_obs_order == curr_right_obs_order &&
@@ -1612,16 +1915,16 @@ struct ConsensusEventsWorker
 		best_right_hit_group.hits = curr_right_hit_group.hits;
 	      }
 
-	    update_coverage(best_left_hit_group, *coverage);
+	    // update_coverage(best_left_hit_group, *coverage);
 	    update_junctions(best_left_hit_group, *junctions);
 	    update_insertions_and_deletions(best_left_hit_group, *insertions, *deletions);
 	    update_fusions(best_left_hit_group, *rt, *fusions);
 
-	    update_coverage(best_right_hit_group, *coverage);
+	    // update_coverage(best_right_hit_group, *coverage);
 	    update_junctions(best_right_hit_group, *junctions);
 	    update_insertions_and_deletions(best_right_hit_group, *insertions, *deletions);
 	    update_fusions(best_right_hit_group, *rt, *fusions);
-	            
+
 	    l_hs.next_read_hits(curr_left_hit_group);
 	    curr_left_obs_order = it.observation_order(curr_left_hit_group.insert_id);
             
@@ -1629,15 +1932,10 @@ struct ConsensusEventsWorker
 	    curr_right_obs_order = it.observation_order(curr_right_hit_group.insert_id);
 	  }
       }
-
-    for (size_t i = 0; i < hit_factories.size(); ++i)
-      delete hit_factories[i];
-    
-    hit_factories.clear();
   }
 
-  string left_map_fname;
-  string right_map_fname;
+  vector<string> left_map_fnames;
+  vector<string> right_map_fnames;
 
   RefSequenceTable* rt;
 
@@ -1665,9 +1963,11 @@ struct ReportWorker
 				  GBamWriter& um_out,
 				  FragmentType fragment_type)
   {
+    if (is_paired && !report_mixed_alignments)
+      return;
+      
     HitsForRead best_hits;
     best_hits.insert_id = curr_obs_order;
-    
     realign_reads(curr_hit_group, *rt, *junctions, *rev_junctions,
 		  *insertions, *deletions, *rev_deletions, *fusions);
     
@@ -1690,7 +1990,7 @@ struct ReportWorker
 	    update_junctions(best_hits, *final_junctions);
 	    update_insertions_and_deletions(best_hits, *final_insertions, *final_deletions);
 	    update_fusions(best_hits, *rt, *final_fusions, *fusions);
-	    
+
 	    print_sam_for_single(*rt,
 				 best_hits,
 				 fragment_type,
@@ -1708,6 +2008,8 @@ struct ReportWorker
     ReadTable it;
     GBamWriter bam_writer(bam_output_fname.c_str(), sam_header.c_str());
 
+    is_paired = right_map_fnames.size() > 0;
+
     ReadStream left_reads_file(left_reads_fname);
     if (left_reads_file.file() == NULL)
       err_die("Error: cannot open %s for reading\n", left_reads_fname.c_str());
@@ -1718,7 +2020,6 @@ struct ReportWorker
     if (left_reads_offset > 0)
       left_reads_file.seek(left_reads_offset);
     
-    //if (!zpacker.empty()) left_um_fname+=".z";
     GBamWriter* left_um_out=new GBamWriter(left_um_fname.c_str(), sam_header.c_str());
     GBamWriter* right_um_out=NULL;
     
@@ -1726,30 +2027,18 @@ struct ReportWorker
     if (right_reads_offset > 0)
       right_reads_file.seek(right_reads_offset);
     
-    //FZPipe right_um_out;
     if (!right_reads_fname.empty())
       {
-      if (right_reads_file.isBam()) {
-    	right_reads_file.use_alt_name();
-    	right_reads_file.ignoreQC();
-    	right_um_out=new GBamWriter(right_um_fname.c_str(), sam_header.c_str());
-      }
-	//if (!zpacker.empty()) right_um_fname+=".z";
-	//if (right_um_out.openWrite(right_um_fname.c_str(), zpacker)==NULL)
-	//  err_die("Error: cannot open file %s for writing!\n",right_um_fname.c_str());
+	if (right_reads_file.isBam()) {
+	  right_reads_file.use_alt_name();
+	  right_reads_file.ignoreQC();
+	  right_um_out=new GBamWriter(right_um_fname.c_str(), sam_header.c_str());
+	}
       }
 
-    vector<BAMHitFactory*> hit_factories;
-    hit_factories.push_back(new BAMHitFactory(it, *rt));
-    HitStream left_hs(left_map_fname, hit_factories.back(), false, true, true, true);
-    if (left_map_offset > 0)
-      left_hs.seek(left_map_offset);
+    MultipleBAMReader left_hs(it, *rt, left_map_fnames, begin_id, end_id);
+    MultipleBAMReader right_hs(it, *rt, right_map_fnames, begin_id, end_id);
 
-    hit_factories.push_back(new BAMHitFactory(it, *rt));
-    HitStream right_hs(right_map_fname, hit_factories.back(), false, true, true, true);
-    if (right_map_offset > 0)
-      right_hs.seek(right_map_offset);
-    
     HitsForRead curr_left_hit_group;
     HitsForRead curr_right_hit_group;
     
@@ -1777,7 +2066,7 @@ struct ReportWorker
 				       left_reads_file,
 				       bam_writer,
 				       *left_um_out,
-				       right_map_fname.empty() ? FRAG_UNPAIRED : FRAG_LEFT);
+				       is_paired ? FRAG_LEFT : FRAG_UNPAIRED);
 	    
 	    // Get next hit group
 	    left_hs.next_read_hits(curr_left_hit_group);
@@ -1800,7 +2089,7 @@ struct ReportWorker
 	    right_hs.next_read_hits(curr_right_hit_group);
 	    curr_right_obs_order = it.observation_order(curr_right_hit_group.insert_id);
 	  }
-	
+
 	// Since we have both left hits and right hits for this insert,
 	// Find the best pairing and print both
 	while (curr_left_obs_order == curr_right_obs_order &&
@@ -1890,7 +2179,7 @@ struct ReportWorker
 					       left_reads_file,
 					       bam_writer,
 					       *left_um_out,
-					       (right_map_fname.empty() ? FRAG_UNPAIRED : FRAG_LEFT));
+					       is_paired ? FRAG_LEFT : FRAG_UNPAIRED);
 		  }
 		
 		if (curr_right_hit_group.hits.size() > 0)
@@ -1922,26 +2211,19 @@ struct ReportWorker
 			       reads_format, false, begin_id, end_id,
 			       right_um_out, false);
 
-
     // pclose (pipe close), which waits for a process to end, seems to conflict with boost::thread::join somehow,
     // resulting in deadlock like behavior.
     delete left_um_out;
     delete right_um_out;
-
-
-    for (size_t i = 0; i < hit_factories.size(); ++i)
-      delete hit_factories[i];
-
-    hit_factories.clear();
   }
 
   string bam_output_fname;
   string sam_header_fname;
 
   string left_reads_fname;
-  string left_map_fname;
+  vector<string> left_map_fnames;
   string right_reads_fname;
-  string right_map_fname;
+  vector<string> right_map_fnames;
 
   string left_um_fname;
   string right_um_fname;
@@ -1970,14 +2252,16 @@ struct ReportWorker
   int64_t right_reads_offset;
   int64_t right_map_offset;
 
-  boost::random::mt19937 rng;
+  bool is_paired;
+
+  boost::mt19937 rng;
 };
 
 void driver(const string& bam_output_fname,
 	    istream& ref_stream,
-	    const string& left_map_fname,
+	    const vector<string>& left_map_fnames,
 	    const string& left_reads_fname,
-	    const string& right_map_fname,
+	    const vector<string>& right_map_fnames,
 	    const string& right_reads_fname,
 	    FILE* junctions_out,
 	    FILE* insertions_out,
@@ -2037,31 +2321,31 @@ void driver(const string& bam_output_fname,
   if (num_threads > 1)
     {
       vector<string> fnames;
-      if (right_map_fname != "")
+      if (right_map_fnames.size() > 0)
 	{
 	  fnames.push_back(right_reads_fname);
-	  fnames.push_back(right_map_fname);
+	  fnames.push_back(right_map_fnames.back());
 	}
       fnames.push_back(left_reads_fname);
-      fnames.push_back(left_map_fname);
+      fnames.push_back(left_map_fnames.back());
       bool enough_data = calculate_offsets(fnames, read_ids, offsets);
       if (!enough_data)
 	num_threads = 1;
     }
 
-  JunctionSet vjunctions[num_threads];
-  InsertionSet vinsertions[num_threads];
-  DeletionSet vdeletions[num_threads];
-  FusionSet vfusions[num_threads];
-  Coverage vcoverages[num_threads];
+  vector<JunctionSet> vjunctions(num_threads);
+  vector<InsertionSet> vinsertions(num_threads);
+  vector<DeletionSet> vdeletions(num_threads);
+  vector<FusionSet> vfusions(num_threads);
+  vector<Coverage> vcoverages(num_threads);
   
   vector<boost::thread*> threads;
   for (int i = 0; i < num_threads; ++i)
     {
       ConsensusEventsWorker worker;
 
-      worker.left_map_fname = left_map_fname;
-      worker.right_map_fname = right_map_fname;
+      worker.left_map_fnames = left_map_fnames;
+      worker.right_map_fnames = right_map_fnames;
       worker.rt = &rt;
       worker.gtf_junctions = &gtf_junctions;
       
@@ -2192,7 +2476,7 @@ void driver(const string& bam_output_fname,
       char filename[1024] = {0};
       sprintf(filename, "%s%d.bam", bam_output_fname.c_str(), i);
       worker.bam_output_fname = filename;
-      string tmpoutdir=getFdir(worker.bam_output_fname);
+      string tmpoutdir = getFdir(worker.bam_output_fname);
       worker.left_um_fname = tmpoutdir;
       sprintf(filename, "unmapped_left_%d.bam", i);
       worker.left_um_fname+=filename;
@@ -2205,9 +2489,9 @@ void driver(const string& bam_output_fname,
 	}
       
       worker.left_reads_fname = left_reads_fname;
-      worker.left_map_fname = left_map_fname;
+      worker.left_map_fnames = left_map_fnames;
       worker.right_reads_fname = right_reads_fname;
-      worker.right_map_fname = right_map_fname;
+      worker.right_map_fnames = right_map_fnames;
 
       worker.gtf_junctions = &gtf_junctions;
       worker.junctions = &junctions;
@@ -2394,7 +2678,10 @@ int main(int argc, char** argv)
       return 1;
     }
   
-  string left_map_filename = argv[optind++];
+  string left_map_filename_list = argv[optind++];
+  vector<string> left_map_filenames;
+  tokenize(left_map_filename_list, ",", left_map_filenames);
+
   if(optind >= argc)
     {
       print_usage();
@@ -2403,12 +2690,14 @@ int main(int argc, char** argv)
   
   string left_reads_filename = argv[optind++];
   string unzcmd=getUnpackCmd(left_reads_filename, false);
-  string right_map_filename;
+  string right_map_filename_list;
+  vector<string> right_map_filenames;
   string right_reads_filename;
   
   if (optind < argc)
     {
-      right_map_filename = argv[optind++];
+      right_map_filename_list = argv[optind++];
+      tokenize(right_map_filename_list, ",", right_map_filenames);
       if(optind >= argc) {
 	print_usage();
 	return 1;
@@ -2462,9 +2751,9 @@ int main(int argc, char** argv)
   
   driver(accepted_hits_file_name,
 	 ref_stream,
-	 left_map_filename,
+	 left_map_filenames,
 	 left_reads_filename,
-	 right_map_filename,
+	 right_map_filenames,
 	 right_reads_filename,
 	 junctions_file,
 	 insertions_file,

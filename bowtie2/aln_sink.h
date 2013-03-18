@@ -43,12 +43,14 @@ enum {
  */
 struct ReportingMetrics {
 
-	ReportingMetrics() { reset(); MUTEX_INIT(lock); }
-	
+	ReportingMetrics():mutex_m() {
+	    reset();
+	}
+
 	void reset() {
 		init(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	}
-	
+
 	void init(
 		uint64_t nread_,
 		uint64_t npaired_,
@@ -120,21 +122,20 @@ struct ReportingMetrics {
 	 * ReportingMetrics shared by multiple threads.
 	 */
 	void merge(const ReportingMetrics& met, bool getLock = false) {
-		ThreadSafe ts(&lock, getLock);
-		
+        ThreadSafe ts(&mutex_m, getLock);
 		nread         += met.nread;
-		
+
 		npaired       += met.npaired;
 		nunpaired     += met.nunpaired;
-		
+
 		nconcord_uni  += met.nconcord_uni;
 		nconcord_uni1 += met.nconcord_uni1;
 		nconcord_uni2 += met.nconcord_uni2;
 		nconcord_rep  += met.nconcord_rep;
 		nconcord_0    += met.nconcord_0;
-		
+
 		ndiscord      += met.ndiscord;
-		
+
 		nunp_0_uni    += met.nunp_0_uni;
 		nunp_0_uni1   += met.nunp_0_uni1;
 		nunp_0_uni2   += met.nunp_0_uni2;
@@ -200,7 +201,7 @@ struct ReportingMetrics {
 	uint64_t  sum_best2;     // Sum of all the second-best alignment scores
 	uint64_t  sum_best;      // Sum of all the best and second-best
 
-	MUTEX_T lock;
+	MUTEX_T mutex_m;
 };
 
 // Type for expression numbers of hits

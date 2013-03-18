@@ -112,8 +112,10 @@ struct SwResult {
  */
 struct SwMetrics {
 
-	SwMetrics() { reset(); MUTEX_INIT(lock); }
-	
+	SwMetrics() : mutex_m() {
+	    reset();
+	}
+
 	void reset() {
 		sws = swcups = swrows = swskiprows = swskip = swsucc = swfail = swbts =
 		sws10 = sws5 = sws3 =
@@ -213,7 +215,7 @@ struct SwMetrics {
 	 * by multiple threads.
 	 */
 	void merge(const SwMetrics& r, bool getLock = false) {
-		ThreadSafe ts(&lock, getLock);
+        ThreadSafe ts(&mutex_m, getLock);
 		sws        += r.sws;
 		sws10      += r.sws10;
 		sws5       += r.sws5;
@@ -286,8 +288,8 @@ struct SwMetrics {
 	uint64_t sdrows;     // total # seed-alignment rows found
 	uint64_t sdsucc;     // # times seed alignment yielded >= 1 hit
 	uint64_t sdooms;     // # times an OOM occurred during seed alignment
-	
-	MUTEX_T lock;
+
+	MUTEX_T mutex_m;
 };
 
 // The various ways that one might backtrack from a later cell (either oall,

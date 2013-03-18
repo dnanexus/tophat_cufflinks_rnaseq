@@ -55,12 +55,10 @@ public:
 		started_(RES_CAT),
 		finished_(RES_CAT),
 		reorder_(reorder),
-		threadSafe_(threadSafe)
+		threadSafe_(threadSafe),
+        mutex_m()
 	{
 		assert(nthreads <= 1 || threadSafe);
-		if(threadSafe_) {
-			MUTEX_INIT(lock_);
-		}
 	}
 
 	/**
@@ -119,7 +117,7 @@ protected:
 	EList<bool>     finished_;
 	bool            reorder_;
 	bool            threadSafe_;
-	MUTEX_T         lock_;
+	MUTEX_T         mutex_m;
 };
 
 class OutputQueueMark {

@@ -43,8 +43,7 @@ build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = prep_reads$(EXEEXT) gtf_to_fasta$(EXEEXT) \
 	fix_map_ordering$(EXEEXT) bam2fastx$(EXEEXT) \
-	segment_juncs$(EXEEXT) closure_juncs$(EXEEXT) \
-	gtf_juncs$(EXEEXT) juncs_db$(EXEEXT) \
+	segment_juncs$(EXEEXT) gtf_juncs$(EXEEXT) juncs_db$(EXEEXT) \
 	long_spanning_reads$(EXEEXT) bam_merge$(EXEEXT) \
 	map2gtf$(EXEEXT) tophat_reports$(EXEEXT) sam_juncs$(EXEEXT)
 subdir = src
@@ -73,8 +72,8 @@ am_libtophat_a_OBJECTS = reads.$(OBJEXT) alphabet.$(OBJEXT) \
 	bwt_map.$(OBJEXT) common.$(OBJEXT) junctions.$(OBJEXT) \
 	insertions.$(OBJEXT) deletions.$(OBJEXT) fusions.$(OBJEXT) \
 	align_status.$(OBJEXT) fragments.$(OBJEXT) tokenize.$(OBJEXT) \
-	inserts.$(OBJEXT) qual.$(OBJEXT) utils.$(OBJEXT) \
-	coverage.$(OBJEXT)
+	inserts.$(OBJEXT) qual.$(OBJEXT) bam_merge_impl.$(OBJEXT) \
+	utils.$(OBJEXT) coverage.$(OBJEXT)
 libtophat_a_OBJECTS = $(am_libtophat_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)" \
 	"$(DESTDIR)$(bindir)"
@@ -89,10 +88,6 @@ am_bam_merge_OBJECTS = bam_merge.$(OBJEXT)
 bam_merge_OBJECTS = $(am_bam_merge_OBJECTS)
 bam_merge_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
 	$(top_builddir)/src/libgc.a $(am__DEPENDENCIES_1)
-am_closure_juncs_OBJECTS = closures.$(OBJEXT)
-closure_juncs_OBJECTS = $(am_closure_juncs_OBJECTS)
-closure_juncs_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
-	$(am__DEPENDENCIES_1)
 am_fix_map_ordering_OBJECTS = fix_map_ordering.$(OBJEXT)
 fix_map_ordering_OBJECTS = $(am_fix_map_ordering_OBJECTS)
 fix_map_ordering_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
@@ -112,7 +107,8 @@ juncs_db_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
 am_long_spanning_reads_OBJECTS = long_spanning_reads.$(OBJEXT)
 long_spanning_reads_OBJECTS = $(am_long_spanning_reads_OBJECTS)
 long_spanning_reads_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_map2gtf_OBJECTS = map2gtf.$(OBJEXT)
 map2gtf_OBJECTS = $(am_map2gtf_OBJECTS)
 map2gtf_DEPENDENCIES = $(top_builddir)/src/libtophat.a libgc.a \
@@ -128,11 +124,13 @@ sam_juncs_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
 am_segment_juncs_OBJECTS = segment_juncs.$(OBJEXT)
 segment_juncs_OBJECTS = $(am_segment_juncs_OBJECTS)
 segment_juncs_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_tophat_reports_OBJECTS = tophat_reports.$(OBJEXT)
 tophat_reports_OBJECTS = $(am_tophat_reports_OBJECTS)
 tophat_reports_DEPENDENCIES = $(top_builddir)/src/libtophat.a \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
 dist_binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
 SCRIPTS = $(bin_SCRIPTS) $(dist_bin_SCRIPTS)
@@ -150,17 +148,17 @@ CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 SOURCES = $(libgc_a_SOURCES) $(libtophat_a_SOURCES) \
 	$(bam2fastx_SOURCES) $(bam_merge_SOURCES) \
-	$(closure_juncs_SOURCES) $(fix_map_ordering_SOURCES) \
-	$(gtf_juncs_SOURCES) $(gtf_to_fasta_SOURCES) \
-	$(juncs_db_SOURCES) $(long_spanning_reads_SOURCES) \
-	$(map2gtf_SOURCES) $(prep_reads_SOURCES) $(sam_juncs_SOURCES) \
+	$(fix_map_ordering_SOURCES) $(gtf_juncs_SOURCES) \
+	$(gtf_to_fasta_SOURCES) $(juncs_db_SOURCES) \
+	$(long_spanning_reads_SOURCES) $(map2gtf_SOURCES) \
+	$(prep_reads_SOURCES) $(sam_juncs_SOURCES) \
 	$(segment_juncs_SOURCES) $(tophat_reports_SOURCES)
 DIST_SOURCES = $(libgc_a_SOURCES) $(libtophat_a_SOURCES) \
 	$(bam2fastx_SOURCES) $(bam_merge_SOURCES) \
-	$(closure_juncs_SOURCES) $(fix_map_ordering_SOURCES) \
-	$(gtf_juncs_SOURCES) $(gtf_to_fasta_SOURCES) \
-	$(juncs_db_SOURCES) $(long_spanning_reads_SOURCES) \
-	$(map2gtf_SOURCES) $(prep_reads_SOURCES) $(sam_juncs_SOURCES) \
+	$(fix_map_ordering_SOURCES) $(gtf_juncs_SOURCES) \
+	$(gtf_to_fasta_SOURCES) $(juncs_db_SOURCES) \
+	$(long_spanning_reads_SOURCES) $(map2gtf_SOURCES) \
+	$(prep_reads_SOURCES) $(sam_juncs_SOURCES) \
 	$(segment_juncs_SOURCES) $(tophat_reports_SOURCES)
 HEADERS = $(noinst_HEADERS)
 ETAGS = etags
@@ -179,6 +177,7 @@ BAM_LDFLAGS = @BAM_LDFLAGS@
 BAM_LIB = @BAM_LIB@
 BOOST_CPPFLAGS = @BOOST_CPPFLAGS@
 BOOST_LDFLAGS = @BOOST_LDFLAGS@
+BOOST_SYSTEM_LIB = @BOOST_SYSTEM_LIB@
 BOOST_THREAD_LIB = @BOOST_THREAD_LIB@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
@@ -830,12 +829,12 @@ noinst_HEADERS = \
 	align_status.h \
 	alphabet.h \
 	timer.h \
-	closures.h \
 	tokenize.h \
 	fragments.h \
 	inserts.h \
 	segments.h \
 	qual.h \
+	bam_merge.h \
 	utils.h \
 	coverage.h
 
@@ -853,6 +852,7 @@ libtophat_a_SOURCES = \
 	tokenize.cpp \
 	inserts.cpp \
 	qual.cpp \
+	bam_merge_impl.cpp \
 	utils.cpp \
 	coverage.cpp
 
@@ -870,10 +870,10 @@ prep_reads_SOURCES = prep_reads.cpp
 prep_reads_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
 prep_reads_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS) 
 segment_juncs_SOURCES = segment_juncs.cpp
-segment_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BAM_LIB)
+segment_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BOOST_SYSTEM_LIB) $(BAM_LIB)
 segment_juncs_LDFLAGS = $(LDFLAGS) $(BOOST_LDFLAGS) $(BAM_LDFLAGS)
 long_spanning_reads_SOURCES = long_spanning_reads.cpp
-long_spanning_reads_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BAM_LIB)
+long_spanning_reads_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BOOST_SYSTEM_LIB) $(BAM_LIB)
 long_spanning_reads_LDFLAGS = $(LDFLAGS) $(BOOST_LDFLAGS) $(BAM_LDFLAGS)
 gtf_juncs_SOURCES = gtf_juncs.cpp
 gtf_juncs_LDADD = $(top_builddir)/src/libtophat.a libgc.a $(BAM_LIB)
@@ -882,7 +882,7 @@ juncs_db_SOURCES = juncs_db.cpp
 juncs_db_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
 juncs_db_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
 tophat_reports_SOURCES = tophat_reports.cpp
-tophat_reports_LDADD = $(top_builddir)/src/libtophat.a  $(BOOST_THREAD_LIB) $(BAM_LIB)
+tophat_reports_LDADD = $(top_builddir)/src/libtophat.a  $(BOOST_THREAD_LIB) $(BOOST_SYSTEM_LIB) $(BAM_LIB)
 tophat_reports_LDFLAGS = $(LDFLAGS) $(BOOST_LDFLAGS) $(BAM_LDFLAGS)
 fix_map_ordering_SOURCES = fix_map_ordering.cpp
 fix_map_ordering_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
@@ -893,9 +893,6 @@ bam2fastx_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
 bam_merge_SOURCES = bam_merge.cpp
 bam_merge_LDADD = $(top_builddir)/src/libtophat.a $(top_builddir)/src/libgc.a $(BAM_LIB)
 bam_merge_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
-closure_juncs_SOURCES = closures.cpp
-closure_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
-closure_juncs_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
 sam_juncs_SOURCES = sam_juncs.cpp
 sam_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
 sam_juncs_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
@@ -978,9 +975,6 @@ bam2fastx$(EXEEXT): $(bam2fastx_OBJECTS) $(bam2fastx_DEPENDENCIES)
 bam_merge$(EXEEXT): $(bam_merge_OBJECTS) $(bam_merge_DEPENDENCIES) 
 	@rm -f bam_merge$(EXEEXT)
 	$(CXXLINK) $(bam_merge_LDFLAGS) $(bam_merge_OBJECTS) $(bam_merge_LDADD) $(LIBS)
-closure_juncs$(EXEEXT): $(closure_juncs_OBJECTS) $(closure_juncs_DEPENDENCIES) 
-	@rm -f closure_juncs$(EXEEXT)
-	$(CXXLINK) $(closure_juncs_LDFLAGS) $(closure_juncs_OBJECTS) $(closure_juncs_LDADD) $(LIBS)
 fix_map_ordering$(EXEEXT): $(fix_map_ordering_OBJECTS) $(fix_map_ordering_DEPENDENCIES) 
 	@rm -f fix_map_ordering$(EXEEXT)
 	$(CXXLINK) $(fix_map_ordering_LDFLAGS) $(fix_map_ordering_OBJECTS) $(fix_map_ordering_LDADD) $(LIBS)
@@ -1065,8 +1059,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/alphabet.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bam2fastx.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bam_merge.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bam_merge_impl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bwt_map.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/closures.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/codons.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/coverage.Po@am__quote@

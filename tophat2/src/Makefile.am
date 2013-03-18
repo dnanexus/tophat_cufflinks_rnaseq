@@ -522,7 +522,6 @@ bin_PROGRAMS = \
 	fix_map_ordering \
 	bam2fastx \
 	segment_juncs \
-	closure_juncs \
 	gtf_juncs \
 	juncs_db \
 	long_spanning_reads \
@@ -580,12 +579,12 @@ noinst_HEADERS = \
 	align_status.h \
 	alphabet.h \
 	timer.h \
-	closures.h \
 	tokenize.h \
 	fragments.h \
 	inserts.h \
 	segments.h \
 	qual.h \
+	bam_merge.h \
 	utils.h \
 	coverage.h
 
@@ -603,6 +602,7 @@ libtophat_a_SOURCES = \
 	tokenize.cpp \
 	inserts.cpp \
 	qual.cpp \
+	bam_merge_impl.cpp \
 	utils.cpp \
 	coverage.cpp
     
@@ -621,11 +621,11 @@ prep_reads_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
 prep_reads_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS) 
 
 segment_juncs_SOURCES = segment_juncs.cpp
-segment_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BAM_LIB)
+segment_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BOOST_SYSTEM_LIB) $(BAM_LIB)
 segment_juncs_LDFLAGS = $(LDFLAGS) $(BOOST_LDFLAGS) $(BAM_LDFLAGS)
 
 long_spanning_reads_SOURCES = long_spanning_reads.cpp
-long_spanning_reads_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BAM_LIB)
+long_spanning_reads_LDADD = $(top_builddir)/src/libtophat.a $(BOOST_THREAD_LIB) $(BOOST_SYSTEM_LIB) $(BAM_LIB)
 long_spanning_reads_LDFLAGS = $(LDFLAGS) $(BOOST_LDFLAGS) $(BAM_LDFLAGS)
 
 gtf_juncs_SOURCES = gtf_juncs.cpp
@@ -637,7 +637,7 @@ juncs_db_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
 juncs_db_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
 
 tophat_reports_SOURCES = tophat_reports.cpp
-tophat_reports_LDADD = $(top_builddir)/src/libtophat.a  $(BOOST_THREAD_LIB) $(BAM_LIB)
+tophat_reports_LDADD = $(top_builddir)/src/libtophat.a  $(BOOST_THREAD_LIB) $(BOOST_SYSTEM_LIB) $(BAM_LIB)
 tophat_reports_LDFLAGS = $(LDFLAGS) $(BOOST_LDFLAGS) $(BAM_LDFLAGS)
 
 fix_map_ordering_SOURCES = fix_map_ordering.cpp
@@ -651,10 +651,6 @@ bam2fastx_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
 bam_merge_SOURCES = bam_merge.cpp
 bam_merge_LDADD = $(top_builddir)/src/libtophat.a $(top_builddir)/src/libgc.a $(BAM_LIB)
 bam_merge_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
-
-closure_juncs_SOURCES = closures.cpp
-closure_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)
-closure_juncs_LDFLAGS = $(LDFLAGS) $(BAM_LDFLAGS)
 
 sam_juncs_SOURCES = sam_juncs.cpp
 sam_juncs_LDADD = $(top_builddir)/src/libtophat.a $(BAM_LIB)

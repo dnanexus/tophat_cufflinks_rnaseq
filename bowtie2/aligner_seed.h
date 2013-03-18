@@ -1328,7 +1328,9 @@ struct SideLocus;
  */
 struct SeedSearchMetrics {
 
-	SeedSearchMetrics() { reset(); MUTEX_INIT(lock); }
+	SeedSearchMetrics() : mutex_m() {
+	    reset();
+	}
 
 	/**
 	 * Merge this metrics object with the given object, i.e., sum each
@@ -1336,7 +1338,7 @@ struct SeedSearchMetrics {
 	 * SeedSearchMetrics object shread by multiple threads.
 	 */
 	void merge(const SeedSearchMetrics& m, bool getLock = false) {
-		ThreadSafe ts(&lock, getLock);
+        ThreadSafe ts(&mutex_m, getLock);
 		seedsearch   += m.seedsearch;
 		possearch    += m.possearch;
 		intrahit     += m.intrahit;
@@ -1378,7 +1380,7 @@ struct SeedSearchMetrics {
 	uint64_t bestmin0;     // # times the best min # edits was 0
 	uint64_t bestmin1;     // # times the best min # edits was 1
 	uint64_t bestmin2;     // # times the best min # edits was 2
-	MUTEX_T  lock;
+	MUTEX_T  mutex_m;
 };
 
 /**

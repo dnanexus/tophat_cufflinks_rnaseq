@@ -30,7 +30,7 @@ cufflinks: libbam libeigen
 
 tophat: libbam
 	cd tophat2; ./configure --with-bam-lib=`pwd`/../libbam --with-bam=`pwd`/../libbam; make
-	cp -a tophat2/src/bam2fastx tophat2/src/bam_merge tophat2/src/bed_to_juncs tophat2/src/closure_juncs tophat2/src/contig_to_chr_coords tophat2/src/fix_map_ordering tophat2/src/gtf_juncs tophat2/src/gtf_to_fasta tophat2/src/juncs_db tophat2/src/long_spanning_reads tophat2/src/map2gtf tophat2/src/prep_reads tophat2/src/sam_juncs tophat2/src/segment_juncs tophat2/src/sra_to_solid tophat2/src/tophat tophat2/src/tophat2 tophat2/src/tophat-fusion-post tophat2/src/tophat_reports resources/usr/local/bin
+	cp -a tophat2/src/bam2fastx tophat2/src/bam_merge tophat2/src/bed_to_juncs tophat2/src/contig_to_chr_coords tophat2/src/fix_map_ordering tophat2/src/gtf_juncs tophat2/src/gtf_to_fasta tophat2/src/juncs_db tophat2/src/long_spanning_reads tophat2/src/map2gtf tophat2/src/prep_reads tophat2/src/sam_juncs tophat2/src/segment_juncs tophat2/src/sra_to_solid tophat2/src/tophat tophat2/src/tophat2 tophat2/src/tophat-fusion-post tophat2/src/tophat_reports resources/usr/local/bin
 	chmod +x resources/usr/local/bin/tophat2
 
 libeigen:

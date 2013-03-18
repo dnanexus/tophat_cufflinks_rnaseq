@@ -24,7 +24,6 @@
 #include <cassert>
 #include <stdexcept>
 #include <getopt.h>
-#include <pthread.h>
 #include <math.h>
 #include <utility>
 #include <limits>
@@ -463,7 +462,6 @@ static struct option long_options[] = {
 	{(char*)"Q2",           required_argument, 0,            ARG_QUALS2},
 	{(char*)"refidx",       no_argument,       0,            ARG_REFIDX},
 	{(char*)"partition",    required_argument, 0,            ARG_PARTITION},
-	{(char*)"nospin",       no_argument,       0,            ARG_USE_SPINLOCK},
 	{(char*)"ff",           no_argument,       0,            ARG_FF},
 	{(char*)"fr",           no_argument,       0,            ARG_FR},
 	{(char*)"rf",           no_argument,       0,            ARG_RF},
@@ -782,10 +780,8 @@ static void printUsage(ostream& out) {
 		<< endl
 	    << " Performance:" << endl
 	    << "  -o/--offrate <int> override offrate of index; must be >= index's offrate" << endl
-#ifdef BOWTIE_PTHREADS
 	    << "  -p/--threads <int> number of alignment threads to launch (1)" << endl
 	    << "  --reorder          force SAM output order to match order of input reads" << endl
-#endif
 #ifdef BOWTIE_MM
 	    << "  --mm               use memory-mapped I/O for index; many 'bowtie's can share" << endl
 #endif
@@ -967,7 +963,6 @@ static void parseOption(int next_option, const char *arg) {
 		case ARG_FF: gMate1fw = true;  gMate2fw = true;  break;
 		case ARG_RF: gMate1fw = false; gMate2fw = true;  break;
 		case ARG_FR: gMate1fw = true;  gMate2fw = false; break;
-		case ARG_USE_SPINLOCK: useSpinlock = false; break;
 		case ARG_SHMEM: useShmem = true; break;
 		case ARG_SEED_SUMM: seedSumm = true; break;
 		case ARG_MM: {
@@ -1033,17 +1028,9 @@ static void parseOption(int next_option, const char *arg) {
 			break;
 		case ARG_WRAPPER: wrapper = arg; break;
 		case 'p':
-#ifndef BOWTIE_PTHREADS
-			cerr << "-p/--threads is disabled because bowtie was not compiled with pthreads support" << endl;
-			throw 1;
-#endif
 			nthreads = parseInt(1, "-p/--threads arg must be at least 1", arg);
 			break;
 		case ARG_FILEPAR:
-#ifndef BOWTIE_PTHREADS
-			cerr << "--filepar is disabled because bowtie was not compiled with pthreads support" << endl;
-			throw 1;
-#endif
 			fileParallel = true;
 			break;
 		case '3': gTrim3 = parseInt(0, "-3/--trim3 arg must be at least 0", arg); break;
@@ -1134,12 +1121,7 @@ static void parseOption(int next_option, const char *arg) {
 		case ARG_SANITY: sanityCheck = true; break;
 		case 't': timing = true; break;
 		case ARG_METRIC_IVAL: {
-#ifdef BOWTIE_PTHREADS
 			metricsIval = parseInt(1, "--metrics arg must be at least 1", arg);
-#else
-			cerr << "Must compile with BOWTIE_PTHREADS to use --metrics" << endl;
-			throw 1;
-#endif
 			break;
 		}
 		case ARG_METRIC_FILE: metricsFile = arg; break;
@@ -1593,9 +1575,7 @@ createPatsrcFactory(PairedPatternSource& _patsrc, int tid) {
 	return patsrcFact;
 }
 
-#ifdef BOWTIE_PTHREADS
 #define PTHREAD_ATTRS (PTHREAD_CREATE_JOINABLE | PTHREAD_CREATE_DETACHED)
-#endif
 
 static PairedPatternSource*     multiseed_patsrc;
 static Ebwt*                    multiseed_ebwtFw;
@@ -1612,7 +1592,9 @@ static OutFileBuf*              multiseed_metricsOfb;
  */
 struct OuterLoopMetrics {
 
-	OuterLoopMetrics() { reset(); MUTEX_INIT(lock); }
+	OuterLoopMetrics() {
+	    reset();
+	}
 
 	/**
 	 * Set all counters to 0.
@@ -1631,7 +1613,7 @@ struct OuterLoopMetrics {
 		const OuterLoopMetrics& m,
 		bool getLock = false)
 	{
-		ThreadSafe ts(&lock, getLock);
+		ThreadSafe ts(&mutex_m, getLock);
 		reads += m.reads;
 		bases += m.bases;
 		srreads += m.srreads;
@@ -1650,7 +1632,7 @@ struct OuterLoopMetrics {
 	uint64_t fbases;  // filtered bases
 	uint64_t ureads;  // unfiltered reads
 	uint64_t ubases;  // unfiltered bases
-	MUTEX_T lock;
+	MUTEX_T mutex_m;
 };
 
 /**
@@ -1713,7 +1695,7 @@ struct PerfMetrics {
 		uint64_t nbtfiltdo_,
 		bool getLock)
 	{
-		ThreadSafe ts(&lock, getLock);
+		ThreadSafe ts(&mutex_m, getLock);
 		if(ol != NULL) {
 			olmu.merge(*ol, false);
 		}
@@ -1761,7 +1743,7 @@ struct PerfMetrics {
 		bool sync,            //  synchronize output
 		const BTString *name) // non-NULL name pointer if is per-read record
 	{
-		ThreadSafe ts(&lock, sync);
+		ThreadSafe ts(&mutex_m, sync);
 		ostringstream stderrSs;
 		time_t curtime = time(0);
 		char buf[1024];
@@ -2540,7 +2522,7 @@ struct PerfMetrics {
 	uint64_t          nbtfiltsc_u;
 	uint64_t          nbtfiltdo_u;
 
-	MUTEX_T           lock;  // lock for when one ob
+	MUTEX_T           mutex_m;  // lock for when one ob
 	bool              first; // yet to print first line?
 	time_t            lastElapsed; // used in reportInterval to measure time since last call
 };
@@ -2752,7 +2734,7 @@ static void setupMinScores(
  *   + If not identical, continue
  * - 
  */
-static void* multiseedSearchWorker(void *vp) {
+static void multiseedSearchWorker(void *vp) {
 	int tid = *((int*)vp);
 	assert(multiseed_ebwtFw != NULL);
 	assert(multiseedMms == 0 || multiseed_ebwtBw != NULL);
@@ -3772,13 +3754,10 @@ static void* multiseedSearchWorker(void *vp) {
 	// One last metrics merge
 	MERGE_METRICS(metrics, nthreads > 1);
 
-#ifdef BOWTIE_PTHREADS
-	if(tid > 0) { pthread_exit(NULL); }
-#endif
-	return NULL;
+	return;
 }
 
-static void* multiseedSearchWorker_2p5(void *vp) {
+static void multiseedSearchWorker_2p5(void *vp) {
 	int tid = *((int*)vp);
 	assert(multiseed_ebwtFw != NULL);
 	assert(multiseedMms == 0 || multiseed_ebwtBw != NULL);
@@ -4114,10 +4093,7 @@ static void* multiseedSearchWorker_2p5(void *vp) {
 	// One last metrics merge
 	MERGE_METRICS(metrics, nthreads > 1);
 
-#ifdef BOWTIE_PTHREADS
-	if(tid > 0) { pthread_exit(NULL); }
-#endif
-	return NULL;
+	return;
 }
 
 /**
@@ -4157,10 +4133,8 @@ static void multiseedSearch(
 	delete _t;
 	if(!refs->loaded()) throw 1;
 	multiseed_refs = refs.get();
-#ifdef BOWTIE_PTHREADS
-	AutoArray<pthread_t> threads(nthreads-1);
-	AutoArray<int> tids(nthreads-1);
-#endif
+	AutoArray<tthread::thread*> threads(nthreads);
+	AutoArray<int> tids(nthreads);
 	{
 		// Load the other half of the index into memory
 		assert(!ebwtFw.isInMemory());
@@ -4192,26 +4166,20 @@ static void multiseedSearch(
 	// Start the metrics thread
 	{
 		Timer _t(cerr, "Multiseed full-index search: ", timing);
-#ifdef BOWTIE_PTHREADS
-		for(int i = 0; i < nthreads-1; i++) {
+
+		for(int i = 0; i < nthreads; i++) {
 			// Thread IDs start at 1
 			tids[i] = i+1;
 			if(bowtie2p5) {
-				createThread(&threads[i], multiseedSearchWorker_2p5, (void*)&tids[i]);
+				threads[i] = new tthread::thread(multiseedSearchWorker_2p5, (void*)&tids[i]);
 			} else {
-				createThread(&threads[i], multiseedSearchWorker, (void*)&tids[i]);
+			    threads[i] = new tthread::thread(multiseedSearchWorker, (void*)&tids[i]);
 			}
 		}
-#endif
-		int tmp = 0;
-		if(bowtie2p5) {
-			multiseedSearchWorker_2p5((void*)&tmp);
-		} else {
-			multiseedSearchWorker((void*)&tmp);
-		}
-#ifdef BOWTIE_PTHREADS
-		for(int i = 0; i < nthreads-1; i++) joinThread(threads[i]);
-#endif
+
+        for (int i = 0; i < nthreads; i++)
+            threads[i]->join();
+
 	}
 	if(!metricsPerRead && (metricsOfb != NULL || metricsStderr)) {
 		metrics.reportInterval(metricsOfb, metricsStderr, true, false, NULL);

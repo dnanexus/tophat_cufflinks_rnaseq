@@ -98,7 +98,6 @@ bool parallel = true;
 unsigned int max_insertion_length = 3;
 unsigned int max_deletion_length = 3;
 
-
 int inner_dist_mean = 200;
 int inner_dist_std_dev = 20;
 int max_mate_inner_dist = -1;
@@ -121,7 +120,10 @@ uint32_t min_closure_exon_length = 100;
 int island_extension = 25;
 int segment_length = 25;
 int segment_mismatches = 2;
-int max_read_mismatches = 2;
+int read_mismatches = 2;
+int read_gap_length = 2;
+int read_edit_dist = 2;
+int read_realign_edit_dist = 2;
 int max_splice_mismatches = 1;
 
 ReadFormat reads_format = FASTQ;
@@ -129,6 +131,7 @@ ReadFormat reads_format = FASTQ;
 bool verbose = false;
 
 unsigned int max_multihits = 20;
+bool suppress_hits = false;
 unsigned int max_seg_multihits = 40;
 bool no_closure_search = false;
 bool no_coverage_search = false;
@@ -275,12 +278,16 @@ enum
     OPT_GENE_FILTER,
     OPT_GFF_ANNOTATIONS,
     OPT_MAX_MULTIHITS,
+    OPT_SUPPRESS_HITS,
     OPT_MAX_SEG_MULTIHITS,
     OPT_NO_CLOSURE_SEARCH,
     OPT_NO_COVERAGE_SEARCH,
     OPT_NO_MICROEXON_SEARCH,
     OPT_SEGMENT_LENGTH,
     OPT_READ_MISMATCHES,
+    OPT_READ_GAP_LENGTH,
+    OPT_READ_EDIT_DIST,
+    OPT_READ_REALIGN_EDIT_DIST,
     OPT_SEGMENT_MISMATCHES,
     OPT_MIN_CLOSURE_EXON,
     OPT_MAX_CLOSURE_INTRON,
@@ -350,13 +357,17 @@ static struct option long_options[] = {
 {"gene-filter",		required_argument,	0,	OPT_GENE_FILTER},
 {"gtf-annotations",	required_argument,	0,	OPT_GFF_ANNOTATIONS},
 {"max-multihits",	required_argument,	0,  OPT_MAX_MULTIHITS},
+{"suppress-hits",	no_argument,	0,  OPT_SUPPRESS_HITS},
 {"max-seg-multihits",	required_argument,	0,  OPT_MAX_SEG_MULTIHITS},
 {"no-closure-search",	no_argument,		0,  OPT_NO_CLOSURE_SEARCH},
 {"no-coverage-search",	no_argument,		0,  OPT_NO_COVERAGE_SEARCH},
 {"no-microexon-search",	no_argument,		0,  OPT_NO_MICROEXON_SEARCH},
 {"segment-length",	required_argument,	0,  OPT_SEGMENT_LENGTH},
 {"segment-mismatches",	required_argument,	0,  OPT_SEGMENT_MISMATCHES},
-{"max-mismatches",  required_argument,  0,  OPT_READ_MISMATCHES},
+{"read-mismatches",  required_argument,  0,  OPT_READ_MISMATCHES},
+{"read-gap-length",  required_argument,  0,  OPT_READ_GAP_LENGTH},
+{"read-edit-dist",  required_argument,  0,  OPT_READ_EDIT_DIST},
+{"read-realign-edit-dist",  required_argument,  0,  OPT_READ_REALIGN_EDIT_DIST},
 {"min-closure-exon",	required_argument,	0,  OPT_MIN_CLOSURE_EXON},
 {"min-closure-intron",	required_argument,	0,  OPT_MIN_CLOSURE_INTRON},
 {"max-closure-intron",	required_argument,	0,  OPT_MAX_CLOSURE_INTRON},
@@ -387,7 +398,6 @@ static struct option long_options[] = {
 {"flt-reads",required_argument, 0, OPT_FILTER_READS},
 {"flt-hits",required_argument, 0, OPT_FILTER_HITS},
 {"flt-side",required_argument, 0, OPT_FILTER_SIDE},
-
 {"report-secondary-alignments", no_argument, 0, OPT_REPORT_SECONDARY_ALIGNMENTS},
 {"report-discordant-pair-alignments", no_argument, 0, OPT_REPORT_DISCORDANT_PAIR_ALIGNMENTS},
 {"report-mixed-alignments", no_argument, 0, OPT_REPORT_MIXED_ALIGNMENTS},
@@ -488,6 +498,9 @@ int parse_options(int argc, char** argv, void (*print_usage)())
     case OPT_MAX_MULTIHITS:
       max_multihits = parseIntOpt(1, "--max-multihits arg must be at least 1", print_usage);
       break;
+    case OPT_SUPPRESS_HITS:
+      suppress_hits = true;
+      break;
     case OPT_MAX_SEG_MULTIHITS:
       max_seg_multihits = parseIntOpt(1, "--max-seg-multihits arg must be at least 1", print_usage);
       break;
@@ -508,7 +521,16 @@ int parse_options(int argc, char** argv, void (*print_usage)())
       break;
     case 'N':
     case OPT_READ_MISMATCHES:
-      max_read_mismatches = parseIntOpt(0, "--max-mismatches arg must be at least 0", print_usage);
+      read_mismatches = parseIntOpt(0, "--read-mismatches arg must be at least 0", print_usage);
+      break;
+    case OPT_READ_GAP_LENGTH:
+      read_gap_length = parseIntOpt(0, "--read-gap-length arg must be at least 0", print_usage);
+      break;
+    case OPT_READ_EDIT_DIST:
+      read_edit_dist = parseIntOpt(0, "--read-edit-dist arg must be at least 0", print_usage);
+      break;
+    case OPT_READ_REALIGN_EDIT_DIST:
+      read_realign_edit_dist = parseIntOpt(0, "--read-realign-edit-dist arg must be at least 0", print_usage);
       break;
     case OPT_MIN_CLOSURE_EXON:
       min_closure_exon_length = parseIntOpt(1, "--min-closure-exon arg must be at least 1", print_usage);

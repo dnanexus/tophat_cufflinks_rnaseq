@@ -1378,6 +1378,7 @@ void hits_from_seed_extension(uint32_t ref_id,
 				     antisense,
 				     false,
 				     s.mismatches,
+				     s.mismatches,
 				     0,
 				     end);
 			hits_out.push_back(bh);
@@ -2471,7 +2472,6 @@ void detect_small_insertion(RefSequenceTable& rt,
 			    BowtieHit& rightHit,
 			    std::set<Insertion>& insertions)
 {
-
   RefSequenceTable::Sequence* ref_str = rt.get_seq(leftHit.ref_id());
   if(!ref_str){
     fprintf(stderr, "Error accessing sequence record\n");
@@ -2508,10 +2508,11 @@ void detect_small_insertion(RefSequenceTable& rt,
     vector<int> bestInsertPositions;
     int minErrors = -1;
     simpleSplitAlignment(genomic_sequence, left_read_sequence, right_read_sequence, bestInsertPositions, minErrors);
+
+    if (bestInsertPositions.size() <= 0)
+      return;
     
-    assert (bestInsertPositions.size() > 0);
     int bestInsertPosition = bestInsertPositions[0];
-    
     
     /*
      * Need to decide if the insertion is suitably improves the alignment
@@ -2573,7 +2574,7 @@ void detect_small_deletion(RefSequenceTable& rt,
       return;
     
     size_t read_length = seqan::length(read_sequence);
-    if(rightHit.right() + read_length + begin_offset < 0 )
+    if (rightHit.right() + begin_offset < (int)read_length)
       return;
     
     int discrepancy = (rightHit.right() - leftHit.left()) - read_length;
@@ -2931,118 +2932,140 @@ void detect_fusion(RefSequenceTable& rt,
 }
 
 void find_insertions_and_deletions(RefSequenceTable& rt,
-		ReadStream& reads_file,
-		vector<HitsForRead>& hits_for_read,
-		std::set<Deletion>& deletions,
-		std::set<Insertion>& insertions){
+				   ReadStream& reads_file,
+				   vector<HitsForRead>& hits_for_read,
+				   std::set<Deletion>& deletions,
+				   std::set<Insertion>& insertions){
+  if (hits_for_read.empty())
+    return;
 
-	if(hits_for_read.empty()){
-			return;
+  size_t last_segment = hits_for_read.size() - 1;
+  size_t first_segment = 0;
+  if (last_segment == first_segment)
+    return;
+
+  uint64_t insert_id = 0;
+  for (size_t i = 0; i < hits_for_read.size(); ++i)
+    {
+      if (hits_for_read[i].insert_id != 0)
+	{
+	  insert_id = hits_for_read[i].insert_id;
+	  break;
 	}
+    }
 
-	size_t last_segment = hits_for_read.size()-1;
-	size_t first_segment = 0;
-	if(last_segment == first_segment){
-		return;
-	}
+  if (insert_id == 0)
+    return;
+     
 
-	/*
-	 * We can check up front whether the first or last element is empty
-	 * and avoid doing any more work. Note that the following code requires
-	 * that there be at least one elment in each
-	 */
-	if(hits_for_read[first_segment].hits.empty() || hits_for_read[last_segment].hits.empty()){
-		return;
-	}
+  /*
+   * We can check up front whether the first or last element is empty
+   * and avoid doing any more work. Note that the following code requires
+   * that there be at least one elment in each
+   */
+#if 0
+  if (hits_for_read[first_segment].hits.empty() || hits_for_read[last_segment].hits.empty())
+    return;
+#endif
 
-	/*
-	 * Need to identify the appropriate insert id for this group of reads
-	 */
+  /*
+   * Need to identify the appropriate insert id for this group of reads
+   */
   Read read;
-  bool got_read  = reads_file.getRead(hits_for_read.back().insert_id, read);
-	if(!got_read){
-	  err_die("Error: could not get read# %d from stream!",
-	      (int)hits_for_read.back().insert_id);
-		//return;
-	  }
-
-	/*
-	 * Work through all combinations of mappings for the first and last segment to see if any are indicative
-	 * of a small insertions or deletion
-	 */
-	HitsForRead& left_segment_hits = hits_for_read[first_segment];
-	HitsForRead& right_segment_hits = hits_for_read[last_segment];
-
-	/*
-	 * If either of the segment match lists is empty, we could try
-	 * to be smarter and work our way in until we find good a segment
-	 * match; however, won't do that for noe.
-	 */
-	if(left_segment_hits.hits.empty() || right_segment_hits.hits.empty()){
-		return;
-	}
-
-	seqan::String<char> fullRead, rcRead;
-	if(color){
-	  fullRead = read.seq.c_str() + 1;
+  bool got_read = reads_file.getRead(insert_id, read);
+  if (!got_read)
+    {
+      err_die("Error: could not get read# %d from stream!",
+	      (int)insert_id);
+      return;
+    }
+	
+  for (size_t i = 0; i < hits_for_read.size() - 2; ++i)
+    {
+      /*
+       * Work through all combinations of mappings for the first and last segment to see if any are indicative
+       * of a small insertions or deletion
+       */
+      HitsForRead& left_segment_hits = hits_for_read[i];
+      HitsForRead& right_segment_hits = hits_for_read[i+1];
+      
+      /*
+       * If either of the segment match lists is empty, we could try
+       * to be smarter and work our way in until we find good a segment
+       * match; however, won't do that for noe.
+       */
+      if (left_segment_hits.hits.empty() || right_segment_hits.hits.empty())
+	return;
+      
+      seqan::String<char> fullRead, rcRead;
+      if (color)
+	{
+	  fullRead = read.seq.substr(1 + i * segment_length, 2 * segment_length);
 	  rcRead = fullRead;
 	  seqan::reverse(rcRead);
-	}else{
-	  fullRead = read.seq;
-	  rcRead = read.seq;
+	}
+      else
+	{
+	  fullRead = read.seq.substr(i * segment_length, 2 * segment_length);
+	  rcRead = fullRead;
 	  seqan::reverseComplement(rcRead);
 	}
-
-	size_t read_length = seqan::length(fullRead);
-	for(size_t left_segment_index = 0; left_segment_index < left_segment_hits.hits.size(); left_segment_index++){
-		for(size_t right_segment_index = 0; right_segment_index < right_segment_hits.hits.size(); right_segment_index++){
-			BowtieHit* leftHit = &left_segment_hits.hits[left_segment_index];
-			BowtieHit* rightHit = &right_segment_hits.hits[right_segment_index];
-			/*
-			 * Now we have found a pair of segment hits to investigate. Need to ensure
-			 * that
-			 * 1. the alignment orientation is consistent
-			 * 2. the distance separation is in the appropriate range
-			 * 3. Both hits are aligned to the same contig
-			 */
-			if(leftHit->ref_id() != rightHit->ref_id()){
-				continue;
-			}
-
-			if(leftHit->antisense_align() != rightHit->antisense_align()){
-				continue;
-			}
-
-			seqan::String<char>* modifiedRead = &fullRead;
-			/*
-			 * If we are dealing with an antisense alignment, then the left
-			 * read will actually be on the right, fix this now, to simplify
-			 * the rest of the logic, in addition, we will need to use the reverse
-			 * complement of the read sequence
-			 */
-			if(leftHit->antisense_align()){
-				BowtieHit * tmp = leftHit;
-				leftHit = rightHit;
-				rightHit = tmp;
-				modifiedRead = &rcRead;
-			}
-
-			size_t apparent_length = rightHit->right() - leftHit->left();
-			int length_discrepancy = apparent_length - read_length;
-			if(length_discrepancy > 0 && length_discrepancy <= (int)max_deletion_length){
-				/*
-				 * Search for a deletion
-				 */
-				detect_small_deletion(rt, *modifiedRead, *leftHit, *rightHit, deletions);
-			}
-			if(length_discrepancy < 0 && length_discrepancy >= -(int)max_insertion_length){
-				/*
-				 * Search for an insertion
-				 */
-				detect_small_insertion(rt, *modifiedRead, *leftHit, *rightHit, insertions);
-			}
+      
+      size_t partial_read_length = seqan::length(fullRead);
+      for (size_t left_segment_index = 0; left_segment_index < left_segment_hits.hits.size(); left_segment_index++)
+	{
+	  for (size_t right_segment_index = 0; right_segment_index < right_segment_hits.hits.size(); right_segment_index++)
+	    {
+	      BowtieHit* leftHit = &left_segment_hits.hits[left_segment_index];
+	      BowtieHit* rightHit = &right_segment_hits.hits[right_segment_index];
+	      /*
+	       * Now we have found a pair of segment hits to investigate. Need to ensure
+	       * that
+	       * 1. the alignment orientation is consistent
+	       * 2. the distance separation is in the appropriate range
+	       * 3. Both hits are aligned to the same contig
+	       */
+	      if (leftHit->ref_id() != rightHit->ref_id())
+		continue;
+	      
+	      if (leftHit->antisense_align() != rightHit->antisense_align())
+		continue;
+	      
+	      seqan::String<char>* modifiedRead = &fullRead;
+	      /*
+	       * If we are dealing with an antisense alignment, then the left
+	       * read will actually be on the right, fix this now, to simplify
+	       * the rest of the logic, in addition, we will need to use the reverse
+	       * complement of the read sequence
+	       */
+	      if (leftHit->antisense_align())
+		{
+		  BowtieHit * tmp = leftHit;
+		  leftHit = rightHit;
+		  rightHit = tmp;
+		  modifiedRead = &rcRead;
 		}
+	      
+	      int apparent_length = rightHit->right() - leftHit->left();
+	      int length_discrepancy = apparent_length - partial_read_length;
+	      if (length_discrepancy > 0 && length_discrepancy <= (int)max_deletion_length)
+		{
+		  /*
+		   * Search for a deletion
+		   */
+		  detect_small_deletion(rt, *modifiedRead, *leftHit, *rightHit, deletions);
+		}
+	      
+	      if(length_discrepancy < 0 && length_discrepancy >= -(int)max_insertion_length)
+		{
+		  /*
+		   * Search for an insertion
+		   */
+		  detect_small_insertion(rt, *modifiedRead, *leftHit, *rightHit, insertions);
+		}
+	    }
 	}
+    }	
 }
 
 /*
@@ -3283,7 +3306,7 @@ void find_fusions(RefSequenceTable& rt,
 	      if (fwd_pos >= 0)
 		{
 		  BowtieHit hit(rightHit.ref_id(), rightHit.ref_id(), rightHit.insert_id(),
-				left + fwd_pos, check_read_len, false, 0, true);
+				left + fwd_pos, check_read_len, false, 0, 0, true);
 		  
 		  right_segment_hits.hits.push_back(hit);
 		}
@@ -3293,7 +3316,7 @@ void find_fusions(RefSequenceTable& rt,
 	      if (rev_pos >= 0)
 		{
 		  BowtieHit hit(rightHit.ref_id(), rightHit.ref_id(), rightHit.insert_id(),
-				left + rev_pos, check_read_len, true, 0, true);
+				left + rev_pos, check_read_len, true, 0, 0, true);
 		  
 		  right_segment_hits.hits.push_back(hit);
 		}
@@ -3560,7 +3583,7 @@ void find_gaps(RefSequenceTable& rt,
 	      if (fwd_pos >= 0)
 		{
 		  BowtieHit hit(rightHit.ref_id(), rightHit.ref_id2(), rightHit.insert_id(),
-				left + fwd_pos, check_read_len, false, 0, true);
+				left + fwd_pos, check_read_len, false, 0, 0, true);
 		  
 		  hits_for_read[last_segment].hits.push_back(hit);
 		}
@@ -3570,7 +3593,7 @@ void find_gaps(RefSequenceTable& rt,
 	      if (rev_pos >= 0)
 		{
 		  BowtieHit hit(rightHit.ref_id(), rightHit.ref_id2(), rightHit.insert_id(),
-				left + rev_pos, check_read_len, true, 0, true);
+				left + rev_pos, check_read_len, true, 0, 0, true);
 		  
 		  hits_for_read[last_segment].hits.push_back(hit);
 		}
@@ -4831,15 +4854,15 @@ void driver(istream& ref_stream,
       exit(0);
     }
   
-  std::set<Junction, skip_count_lt> vseg_juncs[num_threads];
+  vector<std::set<Junction, skip_count_lt> > vseg_juncs(num_threads);
   std::set<Junction, skip_count_lt> cov_juncs;
   std::set<Junction, skip_count_lt> butterfly_juncs;
   
   std::set<Junction> juncs;
   
-  std::set<Deletion> vdeletions[num_threads];
-  std::set<Insertion> vinsertions[num_threads];
-  FusionSimpleSet vfusions[num_threads];
+  vector<std::set<Deletion> > vdeletions(num_threads);
+  vector<std::set<Insertion> > vinsertions(num_threads);
+  vector<FusionSimpleSet> vfusions(num_threads);
   
   RefSequenceTable rt(sam_header, true);
   
@@ -5301,7 +5324,7 @@ int main(int argc, char** argv)
       print_usage();
       return 1;
     }
-  
+
   string ref_file_name = argv[optind++];
   
   if(optind >= argc)

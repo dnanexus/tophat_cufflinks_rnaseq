@@ -255,7 +255,7 @@ void driver_bam(string& fname, GBamWriter& bam_writer, GBamWriter* umbam) {
 		   tb->m_data = m_data;
 		 }
 
-		 umbam->write(tb);
+		 umbam->write(tb, rid);
 	   }
 
 	   bam_destroy1(tb);
@@ -319,7 +319,7 @@ void driver_bam(string& fname, GBamWriter& bam_writer, GBamWriter* umbam) {
 		 // In case of Bowtie2, some of the mapped reads against either transcriptome or genome
 		 // may have low alignment scores due to gaps, in which case we will remap those.
 		 // Later, we may have better alignments that usually involve splice junctions.
-		 if (bowtie2 && tbscore<bowtie2_min_score) {
+		 if (bowtie2 && tbscore<=bowtie2_min_score) {
 		   //poor mapping, we want to map this read later in the pipeline
 		   //unmapped = true;
 		   if (umbam!=NULL) {
@@ -460,7 +460,8 @@ int main(int argc, char** argv)
 		GBamWriter *unmapped_bam_writer=NULL;
 		if (!out_unmapped_fname.empty())
 		    unmapped_bam_writer=new GBamWriter(out_unmapped_fname.c_str(),
-		                                       sam_header.c_str());
+		                                       sam_header.c_str(),
+						       out_unmapped_fname + ".index");
 		driver_bam(map_file_name, *bam_writer, unmapped_bam_writer);
 		delete unmapped_bam_writer;
 		delete bam_writer;
