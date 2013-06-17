@@ -126,7 +126,7 @@ def check_reads( reads_tables ):
     # validate that tables contain data that can be used together (all paired or all unpaired, etc)
 
     if len(reads_tables) == 0:
-        raise AppError("Please enter at least one Reads table as input")
+        raise dxpy.AppError("Please enter at least one Reads table as input")
 
     single = 0
     paired = 0
@@ -138,7 +138,7 @@ def check_reads( reads_tables ):
             single = single + 1
 
     if single > 0 and paired > 0:
-        raise AppError("Found both single and paired-end reads.  Please only input one type.")
+        raise dxpy.AppError("Found both single and paired-end reads.  Please only input one type.")
 
     return
 
