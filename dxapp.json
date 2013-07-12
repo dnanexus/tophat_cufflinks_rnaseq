@@ -9,7 +9,7 @@
     {"name": "reference", "label": "Reference", "class": "record", "type": "ContigSet", "help":"Reference genome for read mapping.", "suggestions":[{"name":"Reference Genomes", "project":"project-B406Bq0bQ9jB3GVk65200001", "path":"/"}]},
     {"name": "indexed_reference", "label": "Indexed Reference", "class": "record", "type": "BowtieLetterContigSetV2", "optional": true, "help":"Bowtie2 indexed version of the Reference Genome.  If not provided it will be generated.  Providing it skips this computationally intensive step.", "suggestions":[{"name":"Reference Genomes", "project":"project-B406Bq0bQ9jB3GVk65200001", "path":"/"}]},
     {"name": "gene_model", "label": "Gene Model", "class": "gtable", "type": "Genes", "help":"Gene model to use during both mapping and expression quantification.  This is an object of type 'Genes'", "suggestions":[{"name":"Public Annotations", "project":"project-B406Bq0bQ9jB3GVk65200001", "path":"/"}]},
-    {"name": "output_name", "label": "Output Name", "class": "string", "optional":true, "help":"Results files will named based on this string"},
+    {"name": "output_name", "label": "Output Name", "class": "string", "default":"RNASeq_sample", "help":"Results files will named based on this string"},
     {"name": "tophat_options", "label": "Tophat Options", "class": "string", "default": "-g 1 --b2-very-fast --no-coverage-search --segment-length 100 --no-novel-juncs", "help":"This string will be given to the tophat mapper as is and should be used for passing command line arguments.", "group":"Command Line Parameters"},
     {"name": "cufflinks_options", "label": "Cufflinks Options", "class": "string", "optional": true, "help":"This string will be given to the cufflinks expression quantifying program as is and should be used for passing command line arguments.", "group":"Command Line Parameters"}
   ],
@@ -25,7 +25,7 @@
     "execDepends": [{"name": "xz-utils"}],
     "buildDepends": [{"name": "libncurses5-dev"}, {"name": "libboost1.48-all-dev"}]
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "details": {
     "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",
     "upstreamUrl": "http://bioinformatics.igm.jhmi.edu/salzberg/Salzberg/Software.html",

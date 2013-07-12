@@ -53,7 +53,7 @@ def make_indexed_reference( ref_ID ):
 
     return indexed_ref_record.get_id()
 
-def upload_transcripts_file( trans_file ):
+def upload_transcripts_file( trans_file, sample_name ):
     with open(trans_file, 'r') as fh:
         # eat column header line
         line = fh.readline().rstrip('\n')
@@ -80,7 +80,7 @@ def upload_transcripts_file( trans_file ):
 
         gri_index = dxpy.DXGTable.genomic_range_index("chr", "lo", "hi")
         transcripts = dxpy.new_dxgtable(column_descriptors, indices=[gri_index])
-        transcripts.rename("FPKM_per_gene")
+        transcripts.rename(sample_name+"_FPKM_per_gene")
 
         while True:
             line = fh.readline()
@@ -212,7 +212,8 @@ def main(**job_inputs):
 
     # upload and import the BAM as a Mappings table
     accepted_hits_file = dxpy.upload_local_file('tophat_out/accepted_hits.bam', wait_on_close=True)
-    name = job_inputs.get('output_name', "RNA-seq mappings")
+    name = job_inputs['output_name']
+    name += "_mappings"
     sam_importer = dxpy.DXApp(name="sam_importer")
     print "Importing BAM output of Tophat"
     import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()),
@@ -235,8 +236,10 @@ def main(**job_inputs):
     print "Packing, uploading, and parsing cufflinks output"
     # package cufflinks output
     run_shell("tar -czf cufflinks_output.tar.gz cuff/")
-    orig_trans_file = dxpy.upload_local_file('cufflinks_output.tar.gz')
-    transcripts_table = upload_transcripts_file('cuff/genes.fpkm_tracking')
+    cuff_name = job_inputs['output_name']+"_cufflinks_output.tar.gz"
+    run_shell("mv cufflinks_output.tar.gz "+cuff_name)
+    orig_trans_file = dxpy.upload_local_file(cuff_name)
+    transcripts_table = upload_transcripts_file('cuff/genes.fpkm_tracking', job_inputs['output_name'])
 
     output['mappings'] = {"job":import_job.get_id(), "field": "mappings"}
     output['transcripts'] = dxpy.dxlink(transcripts_table.get_id())
