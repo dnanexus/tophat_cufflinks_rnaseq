@@ -216,9 +216,9 @@ def main(**job_inputs):
     name += "_mappings"
     sam_importer = dxpy.DXApp(name="sam_importer")
     print "Importing BAM output of Tophat"
-    import_job = sam_importer.run(app_input={"file":dxpy.dxlink(accepted_hits_file.get_id()),
-                                             "reference_genome":dxpy.dxlink(genome.get_id()),
-                                             "name":name})
+    import_job = sam_importer.run({"file":dxpy.dxlink(accepted_hits_file.get_id()),
+                                   "reference_genome":dxpy.dxlink(genome.get_id()),
+                                   "name":name})
 
     cuff_cmd = " ".join(['cufflinks', '-p', str(num_cpus), '-G genes.gtf', '-o cuff'])
 
