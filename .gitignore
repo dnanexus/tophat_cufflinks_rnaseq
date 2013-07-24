@@ -48,3 +48,4 @@ resources/usr/local/bin/*
 *.o
 *.a
 *.Po
+*.pyc
