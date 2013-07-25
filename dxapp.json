@@ -16,8 +16,8 @@
   "outputSpec": [
     {"name": "mappings", "label": "Mappings", "class": "gtable", "type": {"$and": ["LetterMappings", "Mappings", "gri"]}},
     {"name": "indexed_reference", "label": "Indexed Reference", "class": "record", "type": "BowtieLetterContigSetV2"},
-    {"name": "transcripts", "label": "Expression Levels", "class": "gtable"},
-    {"name": "cufflinks_output", "label": "Cufflinks Outputs", "class": "file"}
+    {"name": "transcripts", "label": "Expression Levels", "class": "gtable", "help": "Transcripts table containing FPKM values, derived from the genes.fpkm_tracking file."},
+    {"name": "cufflinks_output", "label": "Cufflinks Outputs", "class": "file", "help": "File object, called cufflinks_output.tar.gz, which is a compressed archive of all files output by cufflinks. Useful for downstream analysis of expression values."}
   ],
   "runSpec": {
     "file": "RNA_seq_workflow.py",
