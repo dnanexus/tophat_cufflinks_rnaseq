@@ -25,7 +25,7 @@
     "execDepends": [{"name": "xz-utils"}],
     "buildDepends": [{"name": "libncurses5-dev"}, {"name": "libboost1.48-all-dev"}]
   },
-  "version": "1.0.9",
+  "version": "1.0.10",
   "details": {
     "upstreamAuthor": "Cole Trapnell, Ben Langmead, Daehwan Kim, Geo Pertea, Harold Pimentel, Ryan Kelley, Lior Pachter, Steven Salzberg, Adam Roberts, Brian Williams, Ali Mortazavi, Gordon Kwan, Jeltje van Baren, Barbara Wold",
     "upstreamUrl": "http://bioinformatics.igm.jhmi.edu/salzberg/Salzberg/Software.html",
