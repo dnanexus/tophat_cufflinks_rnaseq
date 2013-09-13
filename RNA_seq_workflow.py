@@ -237,8 +237,7 @@ def main(**job_inputs):
     # package cufflinks output
     run_shell("tar -czf cufflinks_output.tar.gz cuff/")
     cuff_name = job_inputs['output_name']+"_cufflinks_output.tar.gz"
-    run_shell("mv cufflinks_output.tar.gz '"+cuff_name+"'")
-    orig_trans_file = dxpy.upload_local_file(cufflinks_output.tar.gz)
+    orig_trans_file = dxpy.upload_local_file("cufflinks_output.tar.gz")
     orig_trans_file.rename(cuff_name)
     transcripts_table = upload_transcripts_file('cuff/genes.fpkm_tracking', job_inputs['output_name'])
 
