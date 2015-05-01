@@ -265,7 +265,7 @@ def map_fusion_kmer(bwt_idx_prefix, params, sample_update = False):
                 continue
         
             fusion_file = open(fusion, 'r')
-            fusion_file.readline()
+
             for line in fusion_file:
                 left_seq, right_seq = line[:-1].split('\t@\t')[2:4]
                 left_seq = left_seq.split(' ')[0]
@@ -431,7 +431,7 @@ def filter_fusion(bwt_idx_prefix, params):
         data = os.getcwd().split('/')[-1]
 
         fusion_file = open(fusion, 'r')
-        fusion_file.readline()
+
         for line in fusion_file:
             info, sim, left_seq_org, right_seq_org, left_dist, right_dist, pair_list = line[:-1].split('\t@\t')[:7]
 
